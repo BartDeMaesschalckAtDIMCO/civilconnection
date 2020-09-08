@@ -11,17 +11,29 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied.  See the License for the specific language governing
 // permissions and limitations under the License.
-using Autodesk.AECC.Interop.Land;
-using Autodesk.AECC.Interop.Roadway;
-using Autodesk.AECC.Interop.UiRoadway;
-using Autodesk.AutoCAD.Interop;
-using Autodesk.AutoCAD.Interop.Common;
-using Autodesk.DesignScript.Geometry;
-using Autodesk.DesignScript.Runtime;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+using System.Runtime;
+using System.Runtime.InteropServices;
+
+using Autodesk.AutoCAD.Interop;
+using Autodesk.AutoCAD.Interop.Common;
+using Autodesk.AECC.Interop.UiRoadway;
+using Autodesk.AECC.Interop.Roadway;
+using Autodesk.AECC.Interop.UiLand;
+using Autodesk.AECC.Interop.Land;
+using System.Reflection;
+
+using Autodesk.DesignScript.Runtime;
+
+using Autodesk.DesignScript.Geometry;
+
 using System.Xml;
+using System.Globalization;
 
 namespace CivilConnection
 {
@@ -48,6 +60,10 @@ namespace CivilConnection
         /// </summary>
         private AeccAlignmentsSiteless _alignments;
         /// <summary>
+        /// The Surfaces
+        /// </summary>
+        private AeccSurfaces _surfaces;
+        /// <summary>
         /// Gets the internal element.
         /// </summary>
         /// <value>
@@ -66,6 +82,7 @@ namespace CivilConnection
             this._document = _doc;
             _corridors = _doc.Corridors;
             _alignments = _doc.AlignmentsSiteless;
+            _surfaces = _doc.Surfaces;
         }
         #endregion
 
@@ -76,7 +93,7 @@ namespace CivilConnection
         /// <returns></returns>
         private string DumpLandXML()
         {
-           return Utils.DumpLandXML(this._document);
+            return Utils.DumpLandXML(this._document);
         }
 
         /// <summary>
@@ -86,16 +103,38 @@ namespace CivilConnection
         /// <returns></returns>
         /// 
         [IsVisibleInDynamoLibraryAttribute(false)]
-        public IList<LandFeatureline> GetLandFeaturelines(string xmlPath="")
+        public IList<LandFeatureline> GetLandFeaturelines(string xmlPath = "")
         {
             Utils.Log(string.Format("CivilDocument.GetLandFeaturelines started...", ""));
 
             if (string.IsNullOrEmpty(xmlPath))
             {
-                xmlPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "LandFeatureLinesReport.xml");
+                xmlPath = System.IO.Path.Combine(Environment.GetEnvironmentVariable("TMP", EnvironmentVariableTarget.User), "LandFeatureLinesReport.xml");
             }
 
-            bool result = this.SendCommand("-ExportLandFeatureLinesToXml\n");
+            this.SendCommand("-ExportLandFeatureLinesToXml\n");
+
+            DateTime start = DateTime.Now;
+
+
+            while (true)
+            {
+                if (System.IO.File.Exists(xmlPath))
+                {
+                    if (System.IO.File.GetLastWriteTime(xmlPath) > start)
+                    {
+                        start = System.IO.File.GetLastWriteTime(xmlPath);
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+            }
+
+            Utils.Log("XML acquired.");
+
+            bool result = true;
 
             IList<LandFeatureline> output = new List<LandFeatureline>();
 
@@ -113,23 +152,36 @@ namespace CivilConnection
                     {
                         AeccLandFeatureLine f = e as AeccLandFeatureLine;
 
-                        XmlElement fe = xmlDoc.GetElementsByTagName("FeatureLine").Cast<XmlElement>().First(x => x.Attributes["Name"].Value == f.Name);
+                        XmlElement fe = xmlDoc.GetElementsByTagName("FeatureLine").Cast<XmlElement>().First(x => x.Attributes["Handle"].Value == f.Handle.ToString());
 
                         IList<Point> points = new List<Point>();
 
                         foreach (XmlElement p in fe.GetElementsByTagName("Point"))
                         {
-                            double x = Convert.ToDouble(p.Attributes["X"].Value);
-                            double y = Convert.ToDouble(p.Attributes["Y"].Value);
-                            double z = Convert.ToDouble(p.Attributes["Z"].Value);
+                            double x = Convert.ToDouble(p.Attributes["X"].Value, CultureInfo.InvariantCulture);
+                            double y = Convert.ToDouble(p.Attributes["Y"].Value, CultureInfo.InvariantCulture);
+                            double z = Convert.ToDouble(p.Attributes["Z"].Value, CultureInfo.InvariantCulture);
 
                             points.Add(Point.ByCoordinates(x, y, z));
                         }
 
-                        PolyCurve pc = PolyCurve.ByPoints(points);
-                        string style = fe.Attributes["Style"].Value;
+                        points = Point.PruneDuplicates(points);
 
-                        output.Add(new LandFeatureline(f, pc, style));
+                        if (points.Count > 1)
+                        {
+                            PolyCurve pc = PolyCurve.ByPoints(points);
+                            string style = fe.Attributes["Style"].Value;
+
+                            output.Add(new LandFeatureline(f, pc, style));
+                        }
+
+                        foreach (var item in points)
+                        {
+                            if (item != null)
+                            {
+                                item.Dispose();
+                            }
+                        }
                     }
                 }
 
@@ -186,6 +238,14 @@ namespace CivilConnection
                 output.Add(new Alignment(a));
             }
 
+            foreach (AeccSite site in this._document.Sites)
+            {
+                foreach (AeccAlignment a in site.Alignments)
+                {
+                    output.Add(new Alignment(a));
+                }
+            }
+
             Utils.Log(string.Format("CivilDocument.GetAlignments completed.", ""));
 
             return output;
@@ -199,6 +259,40 @@ namespace CivilConnection
         public Alignment GetAlignmentByName(string name)
         {
             return this.GetAlignments().First(x => x.Name == name);
+        }
+
+        /// <summary>
+        /// Gets all surfaces in the document
+        /// </summary>
+        /// <returns>
+        /// List of surfaces
+        /// </returns>
+        public IList<CivilSurface> GetSurfaces()
+        {
+            Utils.Log(string.Format("CivilDocument.GetSurfaces started...", ""));
+
+            IList<CivilSurface> output = new List<CivilSurface>();
+
+            foreach (AeccSurface s in this._surfaces)
+            {
+                output.Add(new CivilSurface(s));
+            }
+
+            Utils.Log(string.Format("CivilDocument.GetSurfaces completed.", ""));
+
+            return output;
+        }
+
+        /// <summary>
+        /// Gets surface by name.
+        /// </summary>
+        /// <param name="name">The name of the surface</param>
+        /// <returns>
+        /// Civil Surface
+        /// </returns>
+        public CivilSurface GetSurfaceByName(string name)
+        {
+            return this.GetSurfaces().First(x => x.Name == name);
         }
 
         #region AUTOCAD METHODS
@@ -464,9 +558,7 @@ namespace CivilConnection
             return new Dictionary<string, object>() { { "PointGroupNames", dict.Keys }, { "Points", dict.Values } };
         }
 
-        // TODO: the COM API returns an error when calling the class to create the AeccTinSurfaceData
-        // USE REFELECTION INSTEAD
-        // CLSID
+
         /// <summary>
         /// Adds the tin surface by points.
         /// </summary>
@@ -474,7 +566,7 @@ namespace CivilConnection
         /// <param name="name">The name.</param>
         /// <param name="layer">The layer.</param>
         /// <returns></returns>
-        [IsVisibleInDynamoLibrary(false)]
+        //[IsVisibleInDynamoLibrary(false)]
         public string AddTINSurfaceByPoints(Point[] points, string name, string layer)
         {
             return Utils.AddTINSurfaceByPoints(this._document, points, name, layer);
