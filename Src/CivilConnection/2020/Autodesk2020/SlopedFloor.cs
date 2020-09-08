@@ -120,7 +120,10 @@ namespace CivilConnection
 
             TransactionManager.Instance.EnsureInTransaction(doc);
 
-            UtilsObjectsLocation.CheckParameters(doc);
+            if (!SessionVariables.ParametersCreated)
+            {
+                UtilsObjectsLocation.CheckParameters(doc); 
+            }
 
             Autodesk.Revit.DB.Floor floor = null;
 
@@ -240,8 +243,6 @@ namespace CivilConnection
                 floor.Level = level;
                 floor.Floortype = floorType;
                 floor.Structural = structural;
-
-                //DocumentManager.Regenerate();
 
                 plane.Dispose();
                 flatLine.Dispose();

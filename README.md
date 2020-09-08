@@ -19,7 +19,7 @@ Here are some features enabled by CivilConnection:
 
 ## CivilPython Main Features
 Here are some features enabled by CivilPython:
-* Uses the IronPython 2.7 that comes with Dynamo for Revit.
+* Uses the IronPython 2.7 that comes with Dynamo for Revit (in alternative you can download IronPython separately).
 * Uses .NET API with the same interpreted approach without the need to compile the code into a .DLL assembly.
 * The .py code can be developed in any external Python IDE.
 * The code can be copied and pasted into a Python Script node in Dynamo for Civil 3D (2020 onward)
@@ -36,10 +36,11 @@ The release numbers for the package correspond to the major release numbers of C
 
 **Note that CivilConnection and Civil 3D with different release numbers are not compatible.**
 
-* Civil 3D and Revit 2017 - CivilConnection 2017 - Autodesk2017.dll
+* Civil 3D and Revit 2017 - CivilConnection 2017 - Autodesk2017.dll [End of Life]
 * Civil 3D and Revit 2018 - CivilConnection 2018 - Autodesk2018.dll
 * Civil 3D and Revit 2019 - CivilConnection 2019 - Autodesk2019.dll
 * Civil 3D and Revit 2020 - CivilConnection 2020 - Autodesk2020.dll
+* Civil 3D and Revit 2021 - CivilConnection 2021 - Autodesk2021.dll
 
 ## License
 See [LICENSING.md](LICENSING.md)

@@ -69,7 +69,11 @@ namespace CivilConnection
                 "AeccXUiRoadway.AeccRoadwayApplication.12.0", // 2018
                 "AeccXUiRoadway.AeccRoadwayApplication.11.0", // 2017
                 "AeccXUiRoadway.AeccRoadwayApplication.10.5" // 2016
-            }; 
+            };
+
+#if C2021
+            progids = new string[] {"AeccXUiRoadway.AeccRoadwayApplication.13.3"};  // 2021
+#endif
 
             AcadApplication m_oAcadApp = System.Runtime.InteropServices.Marshal.GetActiveObject(m_sAcadProdID) as AcadApplication;
 
@@ -170,6 +174,9 @@ namespace CivilConnection
             SessionVariables.LandXMLPath = System.IO.Path.GetTempPath();
             SessionVariables.IsLandXMLExported = false;
             SessionVariables.CivilApplication = this;
+            SessionVariables.ParametersCreated = false;
+            SessionVariables.DocumentTotalTransform = null;
+            RevitUtils.DocumentTotalTransform();
         }
 
         /// <summary>
@@ -208,6 +215,20 @@ namespace CivilConnection
             Utils.Log(string.Format("CivilApplication.UpdatePeriodically started...", ""));
 
             return new CivilApplication();
+        }
+
+
+        /// <summary>
+        /// Writes a message to the log file
+        /// </summary>
+        /// <param name="data">The data that is passed through</param>
+        /// <param name="message">An optional message to write to the log.</param>
+        /// <returns></returns>
+        public static object WriteToLog(object data, string message = "")
+        {
+            Utils.Log(string.Format("{0}{1}", message.Length > 0 ? message + " " : "", data));
+
+            return data;
         }
 
         /// <summary>

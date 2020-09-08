@@ -66,7 +66,18 @@ namespace CivilConnection
         #region PUBLIC METHODS
 
 
-        
+        /// <summary>
+        /// Checks if two values are almost equal
+        /// </summary>
+        /// <param name="a">The first value.</param>
+        /// <param name="b">The second value.</param>
+        /// <returns></returns>
+        [IsVisibleInDynamoLibrary(false)]
+        public static bool AlmostEqual(double a, double b)
+        {
+            return Math.Abs(a - b) <= 0.00001;
+        }
+
 
         /// <summary>
         /// Feets to mm.
@@ -262,62 +273,54 @@ namespace CivilConnection
         {
             Utils.Log(string.Format("Utils.AddArcByArc started...", ""));
 
-            // TODO: different orientation of curves from Dynamo to AutoCAD
-            //string layer = "DYN-Shapes";
-            AddLayer(doc, layer);
-            double rotation = 0;
+            // Arcs in AutoCAD are created horizontal
+            // Create the arc and then rotate in 3D to match Dynamo input
 
             Point center = arc.CenterPoint;
             Plane curvePlane = Plane.ByOriginNormal(center, arc.Normal);
-            Vector direction = Vector.ZAxis();
 
-            if (Math.Abs(Math.Abs(arc.Normal.Dot(Vector.ZAxis())) - 1) > 0.0001)
-            {
-                Plane horizontal = Plane.ByOriginNormal(center, Vector.ZAxis());
-                Circle c1 = Circle.ByPlaneRadius(curvePlane);
-                Circle c2 = Circle.ByPlaneRadius(horizontal);
-                var result = c1.Intersect(c2);
-                IList<Point> points = new List<Point>();
-                foreach (Geometry g in result)
-                {
-                    points.Add(g as Point);
-                }
-                Line intersection = Line.ByBestFitThroughPoints(points);
+            // (1) Create horizontal Dynamo Arc from Arc input
+            CoordinateSystem curveCSInverse = curvePlane.ToCoordinateSystem().Inverse();
 
-                direction = intersection.Direction.Normalized();
+            Arc ha = arc.Transform(curveCSInverse) as Arc;  // this arc is the transformed copy of the input in the origin
 
-                rotation = DegToRad(Vector.ZAxis().AngleAboutAxis(arc.Normal, direction));
-                horizontal.Dispose();
-                c1.Dispose();
-                c2.Dispose();
-            }
-
+            // Do not trust the StartAngle and SweepAngle properties..
+            Vector cs = Vector.ByTwoPoints(ha.CenterPoint, ha.StartPoint);
+            Vector ce = Vector.ByTwoPoints(ha.CenterPoint, ha.EndPoint);
+            double start = Vector.XAxis().AngleAboutAxis(cs, Vector.ZAxis());
+            double end = Vector.XAxis().AngleAboutAxis(ce, Vector.ZAxis());
             double radius = arc.Radius;
-            double start = arc.StartAngle;
-            double end = start + arc.SweepAngle;
 
+            // (2) Create the Arc in AutoCAD
+            AddLayer(doc, layer);
             AcadDatabase db = doc as AcadDatabase;
             AcadModelSpace ms = db.ModelSpace;
-            var vlist = new double[] { center.X, center.Y, center.Z };
+            var vlist = new double[] { ha.CenterPoint.X, ha.CenterPoint.Y, ha.CenterPoint.Z };
             AcadArc a = ms.AddArc(vlist, radius, DegToRad(start), DegToRad(end));
             a.Layer = layer;
 
-            center = center.Add(direction);
+            curveCSInverse = curveCSInverse.Inverse();
 
-            var p1 = new double[] { center.X, center.Y, center.Z };
+            a.TransformBy(new double[,] 
+            {
+                {curveCSInverse.XAxis.X / curveCSInverse.XScaleFactor, curveCSInverse.YAxis.X / curveCSInverse.XScaleFactor, curveCSInverse.ZAxis.X / curveCSInverse.XScaleFactor, curveCSInverse.Origin.X},
+                {curveCSInverse.XAxis.Y / curveCSInverse.YScaleFactor, curveCSInverse.YAxis.Y / curveCSInverse.YScaleFactor, curveCSInverse.ZAxis.Y / curveCSInverse.YScaleFactor, curveCSInverse.Origin.Y},
+                {curveCSInverse.XAxis.Z / curveCSInverse.ZScaleFactor, curveCSInverse.YAxis.Z / curveCSInverse.ZScaleFactor, curveCSInverse.ZAxis.Z / curveCSInverse.ZScaleFactor, curveCSInverse.Origin.Z},
+                {0, 0, 0, 1}
+            });
 
-            a.Rotate3D(vlist, p1, rotation);
-
+            // Dispose Dynamo geometry objects
             center.Dispose();
-            direction.Dispose();
-
             curvePlane.Dispose();
+            curveCSInverse.Dispose();
+            ha.Dispose();
+            cs.Dispose();
+            ce.Dispose();
 
             Utils.Log(string.Format("Utils.AddArcByArc completed.", ""));
 
             return a.Handle;
         }
-
 
         /// <summary>
         /// Adds the point to the document.
@@ -494,12 +497,15 @@ namespace CivilConnection
             return output;
         }
 
-        // TODO: investigate why it's not here
-        // Retrieving the COM class factory for component with
-        // CLSID {E93200C2-0078-4186-8DF9-3D5372B7DC57} failed due to the following error:
-        // 8007007e The specified module could not be found
-
-        // FIXIT: USE REFELECTION INSTEAD
+        // Atul Tegar  -- 20190917
+        private class TinCreationData : AeccTinCreationData
+        {
+            public string BaseLayer { get; set; }
+            public string Description { get; set; }
+            public string Layer { get; set; }
+            public string Name { get; set; }
+            public string Style { get; set; }
+        }
 
         /// <summary>
         /// Adds a TIN surface by points.
@@ -509,18 +515,34 @@ namespace CivilConnection
         /// <param name="name">The name.</param>
         /// <param name="layer">The name of the layer.</param>
         /// <returns></returns>
-        [IsVisibleInDynamoLibrary(false)]
+        [IsVisibleInDynamoLibrary(true)]
         public static string AddTINSurfaceByPoints(AeccRoadwayDocument doc, Point[] points, string name, string layer)
         {
             Utils.Log(string.Format("Utils.AddTINSurfaceByPoints started...", ""));
 
-            string handle = "eNull";
+            List<Point> pts = new List<Point>();
+
+            foreach (Point p in points)
+            {
+                if (double.IsInfinity(p.X) || double.IsInfinity(p.Y) || double.IsInfinity(p.Z) ||
+                    double.MaxValue < p.X || double.MaxValue < p.Y || double.MaxValue < p.Z ||
+                    double.MinValue > p.X || double.MinValue > p.Y || double.MinValue > p.Z ||
+                    double.NaN == p.X || double.NaN == p.Y || double.NaN == p.Z)
+                {
+                    Utils.Log(string.Format("Discarded {0} ", p));
+                    continue;
+                }
+
+                pts.Add(p);
+            }
+
+            string handle = "";
 
             try
             {
                 AddLayer(doc, layer);
 
-                AeccPointGroup group = doc.HandleToObject(AddPointGroupByPoint(doc, points, name)) as AeccPointGroup;
+                AeccPointGroup group = doc.HandleToObject(AddPointGroupByPoint(doc, pts.ToArray(), name)) as AeccPointGroup;
 
                 AeccSurfaces surfaces = doc.Surfaces;
 
@@ -528,28 +550,20 @@ namespace CivilConnection
 
                 if (surfacesType != null)
                 {
-                    //AeccTinCreationData data = new AeccTinCreationData()
-                    //{
-                    //    BaseLayer = layer,
-                    //    Description = "Created by Autodesk CivilConnection",
-                    //    Layer = layer,
-                    //    Name = name,
-                    //    Style =  doc.SurfaceStyles.Cast<AeccSurfaceStyle>().First().Name
-                    //};
+                    TinCreationData data = new TinCreationData()
+                    {
+                        BaseLayer = layer,
+                        Description = "Created by Autodesk CivilConnection",
+                        Layer = layer,
+                        Name = name,
+                        Style = doc.SurfaceStyles.Cast<AeccSurfaceStyle>().First().Name
+                    };
 
-                    dynamic surf = surfacesType.InvokeMember("AddTinSurface",
-                        BindingFlags.InvokeMethod,
-                        System.Type.DefaultBinder,
-                        surfaces,
-                        new object[] { new AeccTinCreationData() });
+                    AeccTinSurface surface = surfaces.AddTinSurface(data);
 
-                    handle = "eDebug - AeccTinCreationData";
+                    surface.PointGroups.Add(group);
 
-                    // AeccTinSurface surface = surfaces.AddTinSurface(data);
-
-                    // surf.PointGroups.Add(group);
-
-                    handle = surf.Handle;
+                    handle = surface.Handle;
                 }
             }
             catch (Exception ex)
@@ -615,7 +629,6 @@ namespace CivilConnection
         {
             Utils.Log(string.Format("Utils.AddCircleByCircle started...", ""));
 
-            //string layer = "DYN-Shapes";
             AddLayer(doc, layer);
 
             Point center = c.CenterPoint;
@@ -654,7 +667,6 @@ namespace CivilConnection
         {
             Utils.Log(string.Format("Utils.AddLWPolylineByPoints started...", ""));
 
-            //string layer = "DYN-Shapes";
             AddLayer(doc, layer);
 
             AcadDatabase db = doc as AcadDatabase;
@@ -699,8 +711,6 @@ namespace CivilConnection
             points.Add(polycurve.EndPoint);
 
             Utils.Log(string.Format("Utils.AddLWPolylineByPolyCurve completed.", ""));
-
-            totalTransform.Dispose();
 
             return AddLWPolylineByPoints(doc, points, layer);
         }
@@ -840,8 +850,6 @@ namespace CivilConnection
 
             IList<string> temp = new List<string>();
 
-            //curve = curve.Transform(RevitUtils.DocumentTotalTransform().Inverse()) as Curve;
-
             if (curve.ToString().Contains("Line"))
             {
                 temp.Add(AddPolylineByPoints(doc, new List<Point>() { curve.StartPoint, curve.EndPoint }, layer));
@@ -859,28 +867,12 @@ namespace CivilConnection
                 Arc arc = curve as Arc;
 
                 temp.Add(AddArcByArc(doc, arc, layer));
-
-                //Rotate3DByCurveNormal(doc, temp.Last(), arc);
             }
             else if (curve.ToString().Contains("PolyCurve") ||
                 curve.ToString().Contains("Rectangle") ||
                 curve.ToString().Contains("Polygon"))
             {
                 PolyCurve polycurve = curve as PolyCurve;
-
-                //IList<Point> points = new List<Point>();
-
-                //foreach (Curve crv in polycurve.Curves())
-                //{
-                //    points.Add(crv.StartPoint);
-                //}
-
-                //if (curve.IsClosed)
-                //{
-                //    points.Add(points.First());
-                //}
-
-                //temp.Add(AddPolylineByPoints(doc, points));
 
                 Acad3DPolyline pl = doc.HandleToObject(AddPolylineByPoints(doc, new List<Point>() { polycurve.CurveAtIndex(0).StartPoint, polycurve.CurveAtIndex(0).EndPoint }, layer));
 
@@ -909,26 +901,7 @@ namespace CivilConnection
 
                 temp.Add(pl.Handle);
 
-            }
-            else
-            {
-                try
-                {
-                    var geos = curve.Explode();
-
-                    if (geos.Length > 0)
-                    {
-                        var curves = geos.Cast<Curve>().ToList();
-                        temp.Add(AddPolylineByCurves(doc, curves, layer));
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Utils.Log(string.Format("ERROR: Utils.AddPolylineByCurve {0}", ex.Message));
-
-                    temp.Add(AddPolylineByPoints(doc, new List<Point>() { curve.StartPoint, curve.EndPoint }, layer));
-                }
-            }
+            }           
 
             Utils.Log(string.Format("Utils.AddPolylineByCurve completed.", ""));
 
@@ -981,7 +954,6 @@ namespace CivilConnection
         {
             Utils.Log(string.Format("Utils.AddExtrudedSolidByPoints started...", ""));
 
-            //string layer = "DYN-Solids";
             AddLayer(doc, layer);
 
             Acad3DSolid solid = null;
@@ -1037,7 +1009,6 @@ namespace CivilConnection
         {
             Utils.Log(string.Format("Utils.AddRegionByPatch started...", ""));
 
-            //string layer = "DYN-Solids";
             AddLayer(doc, layer);
 
             AcadDatabase db = doc as AcadDatabase;
@@ -1088,7 +1059,6 @@ namespace CivilConnection
         {
             Utils.Log(string.Format("Utils.AddExtrudedSolidByPatch started...", ""));
 
-            //string layer = "DYN-Solids";
             AddLayer(doc, layer);
 
             Acad3DSolid solid = null;
@@ -1124,7 +1094,6 @@ namespace CivilConnection
         {
             Utils.Log(string.Format("Utils.AddExtrudedSolidByCurves started...", ""));
 
-            //string layer = "DYN-Solids";
             AddLayer(doc, layer);
 
             Acad3DSolid solid = null;
@@ -1420,24 +1389,27 @@ namespace CivilConnection
         {
             Utils.Log(string.Format("Utils.ImportGeometry started...", ""));
 
+            if (geometry.Length == 0)
+            {
+                Utils.Log(string.Format("No geometry!", ""));
+
+                return null;
+            }
+
             AddLayer(doc, layer);
 
             IList<string> currentHandles = new List<string>();
             IList<string> newHandles = new List<string>();
 
+            Dictionary<Geometry, string> dict = new Dictionary<Geometry, string>();
+
             AcadDatabase db = doc as AcadDatabase;
 
             AcadModelSpace ms = db.ModelSpace;
 
-            foreach (AcadEntity s in ms)
-            {
-                if (s.EntityName.Contains("Solid") || s.EntityName.Contains("Surface"))
-                {
-                    currentHandles.Add(s.Handle);
-                }
-            }
+            // this is to make sure that the geometries are processed in the same order as they are coming in the geometry inputs
 
-            IList<Geometry> solids = new List<Geometry>();
+            IList<Geometry> solids = new List<Geometry>();  // 20191028
 
             foreach (Geometry g in geometry)
             {
@@ -1450,21 +1422,23 @@ namespace CivilConnection
                 {
                     Arc arc = g as Arc;
 
-                    newHandles.Add(AddArcByArc(doc, arc, layer));
+                    dict.Add(g, AddArcByArc(doc, arc, layer));  // 20191028
                 }
                 else if (g is Curve)
                 {
                     Curve c = g as Curve;
 
-                    newHandles.Add(AddPolylineByCurve(doc, c, layer));
+                    dict.Add(g, AddPolylineByCurve(doc, c, layer));  // 20191028
                 }
                 else if (g is Point)
                 {
                     Point p = g as Point;
-                    newHandles.Add(AddPointByPoint(doc, p, layer));
+
+                    dict.Add(g, AddPointByPoint(doc, p, layer));  // 20191028
                 }
             }
 
+            // 20191028
             if (solids.Count > 0)
             {
                 var solidsArray = solids.ToArray();
@@ -1473,29 +1447,103 @@ namespace CivilConnection
 
                 Geometry.ExportToSAT(solidsArray, path);
 
+                int start = ms.Count;
+
                 doc.Import(path, new double[] { 0, 0, 0 }, 1);
 
-                foreach (AcadEntity s in ms)
+                int end = ms.Count;
+
+                IList<AcadEntity> added = new List<AcadEntity>();
+
+                for (int i = start; i < end; ++i)
                 {
-                    if (s.EntityName.Contains("Solid") || s.EntityName.Contains("Surface"))
+                    var s = ms.Item(i);
+
+                    if (s.EntityName.Contains("Solid") || s.EntityName.Contains("Surface"))  // The assumption is that the import of the SAT file respects the order of the solids
                     {
                         if (!currentHandles.Contains(s.Handle))
                         {
                             s.Layer = layer;
-                            newHandles.Add(s.Handle);
+
+                            added.Add(s);
                         }
                     }
+                }
+
+                for (int i = 0; i < added.Count; ++i)
+                {
+                    dict.Add(solids[i], added[i].Handle);
                 }
 
                 if (File.Exists(path))
                 {
                     File.Delete(path);
                 }
+            }
 
-                //File.Delete(path); 
+            // reorder handles to match intial input order
+
+            foreach (var g in geometry)
+            {
+                newHandles.Add(dict[g]);
             }
 
             Utils.Log(string.Format("Utils.ImportGeometry completed.", ""));
+
+            return newHandles;
+        }
+
+        /// <summary>
+        /// Imports the geometry of a SAT file
+        /// </summary>
+        /// <param name="doc"></param>
+        /// <param name="path"></param>
+        /// <param name="layer"></param>
+        /// <returns></returns>
+        public static IList<string> ImportGeometryByPath(AeccRoadwayDocument doc, string path, string layer)
+        {
+            if (Path.GetExtension(path).ToLower() != ".sat")
+            {
+                Utils.Log(string.Format("ERROR: File path is not a SAT file", ""));
+
+                throw new Exception("File path is not a SAT file");
+            }
+
+            Utils.Log(string.Format("Utils.ImportGeometryByPath started...", ""));
+
+            AddLayer(doc, layer);
+
+            IList<string> currentHandles = new List<string>();
+            IList<string> newHandles = new List<string>();
+
+            Dictionary<Geometry, string> dict = new Dictionary<Geometry, string>();
+
+            AcadDatabase db = doc as AcadDatabase;
+
+            AcadModelSpace ms = db.ModelSpace;
+
+            int start = ms.Count;
+
+            doc.Import(path, new double[] { 0, 0, 0 }, 1);
+
+            int end = ms.Count;
+
+            for (int i = start; i < end; ++i)
+            {
+                var s = ms.Item(i);
+
+                if (s.EntityName.Contains("Solid") || s.EntityName.Contains("Surface"))  // The assumption is that the import of the SAT file respects the order of the solids
+                {
+                    if (!currentHandles.Contains(s.Handle))
+                    {
+                        s.Layer = layer;
+
+                        newHandles.Add(s.Handle);
+                    }
+                }
+            }
+
+            Utils.Log(string.Format("Utils.ImportGeometryByPath completed.", ""));
 
             return newHandles;
         }
@@ -1518,7 +1566,7 @@ namespace CivilConnection
 
             var totalTransform = RevitUtils.DocumentTotalTransform();
 
-            var totalTransformInverse = totalTransform.Inverse();
+            var totalTransformInverse = RevitUtils.DocumentTotalTransformInverse();
 
             string result = "";
             string handles = "";
@@ -1588,8 +1636,6 @@ namespace CivilConnection
 
                 IList<string> handlesList = new List<string>();
 
-                //Solid geometry = Solid.ByUnion(solids.ToArray()).Transform(RevitUtils.DocumentTotalTransform().Inverse()) as Solid;
-
                 Acad3DSolid newSolid = null;
 
                 foreach (Solid i in solids)
@@ -1654,10 +1700,6 @@ namespace CivilConnection
             }
 
             element.SetParameterByName(parameter, handles);
-
-            totalTransform.Dispose();
-
-            totalTransformInverse.Dispose();
 
             Utils.Log(string.Format("Utils.ImportElement completed.", ""));
 
@@ -1725,8 +1767,6 @@ namespace CivilConnection
                     SessionVariables.IsLandXMLExported = false;  // 1.1.0
 
                     DumpLandXML(doc);  // 1.1.0
-
-                    //  throw new Exception("Export the LandXML corridor data from the Civil 3D document.\nSave the file in the %Temp% folder\nwith the same name of the Civil 3D document.");  // 1.1.0
                 }
 
                 xmlDoc.Load(landxml);
@@ -1784,7 +1824,7 @@ namespace CivilConnection
         [IsVisibleInDynamoLibrary(false)]
         public static void Log(string message)
         {
-            string path = Path.Combine(Path.GetTempPath(), "CivilConnection_temp.log");
+            string path = System.IO.Path.Combine(Environment.GetEnvironmentVariable("TMP", EnvironmentVariableTarget.User), "CivilConnection_temp.log");
 
             using (StreamWriter sw = new StreamWriter(path, true))
             {
@@ -1798,7 +1838,7 @@ namespace CivilConnection
         [IsVisibleInDynamoLibrary(false)]
         public static void InitializeLog()
         {
-            string path = Path.Combine(Path.GetTempPath(), "CivilConnection_temp.log");
+            string path = System.IO.Path.Combine(Environment.GetEnvironmentVariable("TMP", EnvironmentVariableTarget.User), "CivilConnection_temp.log");
 
             if (File.Exists(path))
             {
@@ -1926,7 +1966,6 @@ namespace CivilConnection
                     }
 
                     // 20180810 - Changed it throws some errors needs investigation
-                    // baselineRegion = baselineRegion.OrderBy(p => b.GetArrayStationOffsetElevationByPoint(p[0][0])[0]).ToList();
 
                     baseline.Add(baselineRegion);
 
@@ -1962,11 +2001,8 @@ namespace CivilConnection
 
             AeccRoadwayDocument doc = corridor._document;
 
-            // DumpLandXML(doc); Commented on 1.1.0
-
             Log(string.Format("Create LandXML", ""));
 
-            //XmlDocument xmlDoc = GetXmlDocument(doc, corridor.Name);
             XmlDocument xmlDoc = GetXmlDocument(doc);
 
             XmlNamespaceManager nsmgr = GetXmlNamespaceManager(xmlDoc);
@@ -2079,7 +2115,6 @@ namespace CivilConnection
 
             AeccRoadwayDocument doc = corridor._document;
 
-            //XmlDocument xmlDoc = GetXmlDocument(doc, corridor.Name);
             XmlDocument xmlDoc = GetXmlDocument(doc);
 
             XmlNamespaceManager nsmgr = GetXmlNamespaceManager(xmlDoc);
@@ -2127,8 +2162,7 @@ namespace CivilConnection
 
                                 foreach (XmlNode subassembly in assembly.SelectNodes("lx:DesignCrossSectSurf[@side = 'left' and @closedArea]", nsmgr))
                                 {
-                                    //if (subassembly.ChildNodes.Count > 2)
-                                    //{
+
                                     foreach (XmlNode calcPoint in subassembly.SelectNodes(string.Format("lx:CrossSectPnt[@code = '{0}']", code), nsmgr))
                                     {
                                         string[] coords = calcPoint.InnerText.Split(separator, StringSplitOptions.None);
@@ -2136,13 +2170,12 @@ namespace CivilConnection
                                         left.Add(Point.ByCoordinates(Convert.ToDouble(coords[0], System.Globalization.CultureInfo.InvariantCulture), 0, Convert.ToDouble(coords[1], System.Globalization.CultureInfo.InvariantCulture)).Transform(cs) as Point);
                                         break;
                                     }
-                                    //}
+
                                 }
 
                                 foreach (XmlNode subassembly in assembly.SelectNodes("lx:DesignCrossSectSurf[@side = 'right' and @closedArea]", nsmgr))
                                 {
-                                    //if (subassembly.ChildNodes.Count > 2)
-                                    //{
+
                                     foreach (XmlNode calcPoint in subassembly.SelectNodes(string.Format("lx:CrossSectPnt[@code = '{0}']", code), nsmgr))
                                     {
                                         string[] coords = calcPoint.InnerText.Split(separator, StringSplitOptions.None);
@@ -2150,7 +2183,7 @@ namespace CivilConnection
                                         right.Add(Point.ByCoordinates(Convert.ToDouble(coords[0], System.Globalization.CultureInfo.InvariantCulture), 0, Convert.ToDouble(coords[1], System.Globalization.CultureInfo.InvariantCulture)).Transform(cs) as Point);
                                         break;
                                     }
-                                    //}
+           
                                 }
 
                                 foreach (XmlNode calcPoint in assembly.SelectNodes(string.Format(".//lx:CrossSectPnt[@code = '{0}']", code), nsmgr))
@@ -2227,11 +2260,8 @@ namespace CivilConnection
 
             AeccRoadwayDocument doc = corridor._document;
 
-            // DumpLandXML(doc);
-
             Log(string.Format("Create LandXML", ""));
 
-            //XmlDocument xmlDoc = GetXmlDocument(doc, corridor.Name);
             XmlDocument xmlDoc = GetXmlDocument(doc);
 
             XmlNamespaceManager nsmgr = GetXmlNamespaceManager(xmlDoc);
@@ -2297,8 +2327,6 @@ namespace CivilConnection
                                     {
                                         Log(string.Format("Processing Subassembly {0} points...", subassembly.ChildNodes.Count));
 
-                                        //if (subassembly.ChildNodes.Count > 2)
-                                        //{
                                         foreach (XmlNode calcPoint in subassembly.SelectNodes(string.Format("lx:CrossSectPnt[@code = '{0}']", code), nsmgr))
                                         {
                                             string[] coords = calcPoint.InnerText.Split(separator, StringSplitOptions.None);
@@ -2307,13 +2335,12 @@ namespace CivilConnection
 
                                             Log(string.Format("Processing Coordinates Left...", ""));
                                         }
-                                        //}
+            
                                     }
 
                                     foreach (XmlNode subassembly in assembly.SelectNodes("lx:DesignCrossSectSurf[@side = 'right' and @closedArea]", nsmgr))
                                     {
-                                        //if (subassembly.ChildNodes.Count > 2)
-                                        //{
+                       
                                         foreach (XmlNode calcPoint in subassembly.SelectNodes(string.Format("lx:CrossSectPnt[@code = '{0}']", code), nsmgr))
                                         {
                                             string[] coords = calcPoint.InnerText.Split(separator, StringSplitOptions.None);
@@ -2322,7 +2349,7 @@ namespace CivilConnection
 
                                             Log(string.Format("Processing Coordinates Right...", ""));
                                         }
-                                        //}
+                            
                                     }
 
                                     foreach (XmlNode calcPoint in assembly.SelectNodes(string.Format(".//lx:CrossSectPnt[@code = '{0}']", code), nsmgr))
@@ -2406,6 +2433,7 @@ namespace CivilConnection
         /// </summary>
         /// <param name="corridor">The corridor.</param>
         /// <returns></returns>
+        [IsVisibleInDynamoLibrary(false)]
         public static IList<IList<IList<Featureline>>> GetFeaturelines(Corridor corridor)  // 20190125
         {
             Utils.Log(string.Format("Utils.GetFeaturelines started...", ""));
@@ -2422,9 +2450,387 @@ namespace CivilConnection
                 }
             }
 
+            corridor._corridorFeaturelinesXMLExported = true;
+
             Utils.Log(string.Format("Utils.GetFeaturelines completed.", ""));
 
             return corridorFeaturelines;
+        }
+
+        /// <summary>
+        /// Gets the triangles from a CivilSurface
+        /// </summary>
+        /// <param name="surface">The CivilSurface.</param>
+        /// <returns></returns>
+        [IsVisibleInDynamoLibrary(false)]
+        public static IList<Surface> GetSurfaceTriangles(CivilSurface surface)  // 20190922
+        {
+            Utils.Log(string.Format("Utils.GetSurfaceTriangles ({0}) started...", surface.Name));
+
+            IList<Surface> triangles = new List<Surface>();
+
+            string xmlPath = Path.Combine(Environment.GetEnvironmentVariable("TMP", EnvironmentVariableTarget.User), "Surface.xml");  // Revit 2020 changed the path to the temp at a session level
+
+            Utils.Log(xmlPath);
+
+            surface.InternalElement.Document.SendCommand(string.Format("-ExportSurfaceToXML\n{0}\n", surface.InternalElement.Handle));
+
+            DateTime start = DateTime.Now;
+
+            while (true)
+            {
+                if (File.Exists(xmlPath))
+                {
+                    if (File.GetLastWriteTime(xmlPath) > start)
+                    {
+                        start = File.GetLastWriteTime(xmlPath);
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+            }
+
+            Utils.Log("XML acquired.");
+
+            if (File.Exists(xmlPath))
+            {
+                IList<Featureline> output = new List<Featureline>();
+
+                XmlDocument xmlDoc = new XmlDocument();
+                xmlDoc.Load(xmlPath);
+
+                foreach (XmlElement se in xmlDoc.GetElementsByTagName("Surface")
+                    .Cast<XmlElement>()
+                    .Where(x => x.Attributes["Name"].Value == surface.Name))
+                {
+                    Dictionary<string, Point> points = new Dictionary<string, Point>();
+
+                    foreach (XmlElement ve in se.GetElementsByTagName("Vertex"))
+                    {
+                        double x = 0;
+                        double y = 0;
+                        double z = 0;
+                        string id = "";
+
+                        try
+                        {
+                            x = Convert.ToDouble(ve.Attributes["X"].Value, System.Globalization.CultureInfo.InvariantCulture);
+                        }
+                        catch (Exception ex)
+                        {
+                            Utils.Log(string.Format("ERROR: X {0}", ex.Message));
+                        }
+
+                        try
+                        {
+                            y = Convert.ToDouble(ve.Attributes["Y"].Value, System.Globalization.CultureInfo.InvariantCulture);
+                        }
+                        catch (Exception ex)
+                        {
+                            Utils.Log(string.Format("ERROR: Y {0}", ex.Message));
+                        }
+
+                        try
+                        {
+                            z = Convert.ToDouble(ve.Attributes["Z"].Value, System.Globalization.CultureInfo.InvariantCulture);
+                        }
+                        catch (Exception ex)
+                        {
+                            Utils.Log(string.Format("ERROR: Z {0}", ex.Message));
+                        }
+
+                        try
+                        {
+                            id = ve.Attributes["id"].Value;
+                        }
+                        catch (Exception ex)
+                        {
+                            Utils.Log(string.Format("ERROR: Id {0}", ex.Message));
+                        }
+
+                        if (!string.IsNullOrEmpty(id) && !string.IsNullOrWhiteSpace(id))
+                        {
+                            points.Add(id, Point.ByCoordinates(x, y, z));
+                        }
+                    }
+
+                    Point a = null;
+                    Point b = null;
+                    Point c = null;
+
+                    // create surfaces
+                    foreach (XmlElement te in se.GetElementsByTagName("Triangle"))
+                    {
+                        a = points[te.Attributes["V0"].Value];
+                        b = points[te.Attributes["V1"].Value];
+                        c = points[te.Attributes["V2"].Value];
+
+                        triangles.Add(Surface.ByPerimeterPoints(new Point[] { a, b, c }));
+                    }
+
+                    a.Dispose();
+                    b.Dispose();
+                    c.Dispose();
+                }
+            }
+
+            Utils.Log(string.Format("Utils.GetSurfaceTriangles completed.", ""));
+
+            return triangles;
+        }
+
+
+        /// <summary>
+        /// Gets the triangles from a CivilSurface
+        /// </summary>
+        /// <param name="surface">The CivilSurface.</param>
+        /// <param name="path">The path to the LandXML that contains the surface export.</param>
+        /// <param name="onlyVisible">If true processes the visible triangles in the XML.</param>
+        /// <returns></returns>
+        [IsVisibleInDynamoLibrary(false)]
+        public static IList<Surface> GetSurfaceTrianglesByLandXML(CivilSurface surface, string path, bool onlyVisible = true)  // 20191008
+        {
+            Utils.Log(string.Format("Utils.GetSurfaceTrianglesByLandXML ({0}) started...", surface.Name));
+
+            IList<Surface> triangles = new List<Surface>();
+
+            string xmlPath = path;
+
+            Utils.Log(xmlPath);
+
+            if (File.Exists(xmlPath))
+            {
+               
+                XmlDocument xmlDoc = new XmlDocument();
+                xmlDoc.Load(xmlPath);
+
+                foreach (XmlElement se in xmlDoc.GetElementsByTagName("Surface")
+                    .Cast<XmlElement>()
+                    .Where(x => x.Attributes["name"].Value == surface.Name))
+                {
+                    Dictionary<string, Point> points = new Dictionary<string, Point>();
+
+                    foreach (XmlElement ve in se.GetElementsByTagName("P"))
+                    {
+                        string[] inner = ve.InnerText.Split(new string[] { " " }, StringSplitOptions.None);
+
+                        double x = Convert.ToDouble(inner[1], System.Globalization.CultureInfo.InvariantCulture);
+                        double y = Convert.ToDouble(inner[0], System.Globalization.CultureInfo.InvariantCulture);
+                        double z = Convert.ToDouble(inner[2], System.Globalization.CultureInfo.InvariantCulture);
+                        string id = "";
+
+                        try
+                        {
+                            id = ve.Attributes["id"].Value;
+                        }
+                        catch (Exception ex)
+                        {
+                            Utils.Log(string.Format("ERROR: Id {0}", ex.Message));
+                        }
+
+                        if (!string.IsNullOrEmpty(id) && !string.IsNullOrWhiteSpace(id))
+                        {
+                            try
+                            {
+                                points.Add(id, Point.ByCoordinates(x, y, z));
+                            }
+                            catch (Exception ex)
+                            {
+                                Utils.Log(string.Format("ERROR: Id {0}", ex.Message));
+                            }
+                        }
+                    }
+
+                    Point a = null;
+                    Point b = null;
+                    Point c = null;
+
+                    // create surfaces
+                    foreach (XmlElement te in se.GetElementsByTagName("F"))
+                    {
+                        if (onlyVisible)
+                        {
+                            // Process only visible faces
+                            if (te.HasAttribute("i"))
+                            {
+                                if (te.Attributes["i"].Value == "1")
+                                {
+                                    continue;
+                                }
+                            }
+                        }
+
+                        string[] inner = te.InnerText.Split(new string[] { " " }, StringSplitOptions.None);
+
+                        a = points[inner[0]];
+                        b = points[inner[1]];
+                        c = points[inner[2]];
+
+                        triangles.Add(Surface.ByPerimeterPoints(new Point[] { a, b, c }));
+                    }
+
+                    a.Dispose();
+                    b.Dispose();
+                    c.Dispose();
+                }
+            }
+
+            Utils.Log(string.Format("Utils.GetSurfaceTrianglesByLandXML completed.", ""));
+
+            return triangles;
+        }
+
+
+        /// <summary>
+        /// Gets the triangles from a CivilSurface
+        /// </summary>
+        /// <param name="surface">The CivilSurface.</param>
+        /// <param name="path">The path to the LandXML that contains the surface export.</param>
+        /// <param name="onlyVisible">If true processes the visible triangles in the XML.</param>
+        /// <returns></returns>
+        [IsVisibleInDynamoLibrary(false)]
+        public static Dictionary<string, object> GetFacesLandXML(CivilSurface surface, string path, bool onlyVisible = true)  // 20191125
+        {
+            Utils.Log(string.Format("Utils.GetFacesLandXML ({0}) started...", surface.Name));
+
+            IList<Surface> triangles = new List<Surface>();
+
+            string xmlPath = path;
+
+            Dictionary<string, Point> points = new Dictionary<string, Point>();
+            IList<IList<int>> faces = new List<IList<int>>();
+
+            if (File.Exists(xmlPath))
+            {
+               
+                XmlDocument xmlDoc = new XmlDocument();
+                xmlDoc.Load(xmlPath);
+
+                Utils.Log(xmlPath);
+
+                string ns = "http://www.landxml.org/schema/LandXML-1.2";
+
+                foreach (XmlElement se in xmlDoc.GetElementsByTagName("Surface")
+                    .Cast<XmlElement>()
+                    .Where(x => x.Attributes["name"].Value == surface.Name))
+                {
+                    Utils.Log("Surface found");
+
+                    foreach (XmlElement ve in se.GetElementsByTagName("P"))
+                    {
+                        string[] inner = ve.InnerText.Split(new string[] { " " }, StringSplitOptions.None);
+
+                        double x = Convert.ToDouble(inner[1], System.Globalization.CultureInfo.InvariantCulture);
+                        double y = Convert.ToDouble(inner[0], System.Globalization.CultureInfo.InvariantCulture);
+                        double z = Convert.ToDouble(inner[2], System.Globalization.CultureInfo.InvariantCulture);
+                        string id = "";
+
+                        Utils.Log(ve.InnerText);
+
+                        try
+                        {
+                            id = ve.Attributes["id"].Value;
+                        }
+                        catch (Exception ex)
+                        {
+                            Utils.Log(string.Format("ERROR: Id {0}", ex.Message));
+                        }
+
+                        if (!string.IsNullOrEmpty(id) && !string.IsNullOrWhiteSpace(id))
+                        {
+                            try
+                            {
+                                points.Add(id, Point.ByCoordinates(x, y, z));
+                            }
+                            catch (Exception ex)
+                            {
+                                Utils.Log(string.Format("ERROR: Id {0}", ex.Message));
+                            }
+                        }
+                    }
+
+
+                    // create surfaces
+                    foreach (XmlElement te in se.GetElementsByTagName("F"))
+                    {
+                        if (onlyVisible)
+                        {
+                            // Process only visible faces
+                            if (te.HasAttribute("i"))
+                            {
+                                if (te.Attributes["i"].Value == "1")
+                                {
+                                    continue;
+                                }
+                            }
+                        }
+
+                        string[] inner = te.InnerText.Split(new string[] { " " }, StringSplitOptions.None);
+
+                        IList<int> indices = inner.Select(i => Convert.ToInt32(i)).ToList();
+
+                        faces.Add(indices);
+                    }
+
+                    break;
+                }
+            }
+
+            Utils.Log(string.Format("Utils.GetFacesLandXML completed.", ""));
+
+            return new Dictionary<string, object>() { {"Points", points}, {"Faces", faces}};
+        }
+
+        /// <summary>
+        /// Recursive function to join surfaces into a PolySurface
+        /// </summary>
+        /// <param name="surfaces">The surface list to process</param>
+        /// <param name="limit">The amount of surfaces to join together</param>
+        /// <returns></returns>
+        [IsVisibleInDynamoLibrary(false)]
+        public static IList<Surface> JoinSurfaces(IList<Surface> surfaces, int limit = 100)  // 20190922
+        {
+            Utils.Log(string.Format("Utils.JoinSurfaces started on {0} surfaces", surfaces.Count));
+
+            if (surfaces.Count == 1)
+            {
+                Utils.Log(string.Format("Utils.JoinSurfaces completed.", ""));
+
+                return surfaces;
+            }
+            else
+            {
+                IList<Surface> result = new List<Surface>();
+
+                for (int i = 0; i < surfaces.Count; i = i + limit)
+                {
+                    IList<Surface> temp = new List<Surface>();
+
+                    for (int j = i; j < i + limit; ++j)
+                    {
+                        if (j < surfaces.Count)
+                        {
+                            temp.Add(surfaces[j]);
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+
+                    PolySurface ps = PolySurface.ByJoinedSurfaces(temp);
+
+                    result.Add(ps);
+                }
+
+                result = JoinSurfaces(result);
+
+                Utils.Log(string.Format("Utils.JoinSurfaces completed.", ""));
+
+                return result;
+            }
         }
 
         // TODO : Create a set of nodes to process directly LandXML files to extract:

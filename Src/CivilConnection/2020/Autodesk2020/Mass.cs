@@ -11,14 +11,18 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied.  See the License for the specific language governing
 // permissions and limitations under the License.
+using Autodesk.DesignScript.Runtime;
 using Autodesk.Revit.DB;
-using Revit.Elements;
+using Autodesk.Revit.DB.Mechanical;
+
 using Revit.GeometryConversion;
+
 using RevitServices.Persistence;
 using RevitServices.Transactions;
-using System;
-using System.Collections.Generic;
+using Revit.Elements;
 using System.IO;
+using System.Collections.Generic;
+using System;
 using System.Linq;
 
 namespace CivilConnection
@@ -43,7 +47,6 @@ namespace CivilConnection
         #endregion
 
         #region PUBLIC PROPERTIES
-        //internal const string Template = Path.Combine(DocumentManager.Instance.CurrentUIApplication.Application.FamilyTemplatePath, "Conceptual Mass\\Metric Mass.rft")
 
         /// <summary>
         /// Reference to the Element
@@ -134,13 +137,11 @@ namespace CivilConnection
             ElementBinder.SetElementForTrace(InternalElement);
         }
 
-#pragma warning disable CS0108 // 'Mass.InternalSetFamilyInstance(FamilyInstance)' hides inherited member 'AbstractFamilyInstance.InternalSetFamilyInstance(FamilyInstance)'. Use the new keyword if hiding was intended.
         /// <summary>
         /// Internals the set family instance.
         /// </summary>
         /// <param name="fi">The family instance.</param>
         protected void InternalSetFamilyInstance(Autodesk.Revit.DB.FamilyInstance fi)
-#pragma warning restore CS0108 // 'Mass.InternalSetFamilyInstance(FamilyInstance)' hides inherited member 'AbstractFamilyInstance.InternalSetFamilyInstance(FamilyInstance)'. Use the new keyword if hiding was intended.
         {
             this.InternalFamilyInstance = fi;
             this.InternalElementId = fi.Id;
@@ -484,7 +485,8 @@ namespace CivilConnection
 
             if (famDoc.IsReadOnly)
             {
-                Utils.Log(string.Format("Family is Read-Only", ""));
+                Utils.Log(string.Format("ERROR: Family is Read-Only", ""));
+                return;
             }
             else
             {
@@ -496,9 +498,52 @@ namespace CivilConnection
             sao.Compact = true;
             sao.MaximumBackups = 1;
 
-            famDoc.SaveAs(famPath, sao);
+            try
+            {
+                famDoc.SaveAs(famPath, sao);
+            }
+            catch (ArgumentNullException ex)
+            {
+                Utils.Log(string.Format("ArgumentNullException: {0}", ex.Message));
+            }
+            catch (Autodesk.Revit.Exceptions.OutdatedDirectlyOpenedCentralException ex)
+            {
+                Utils.Log(string.Format("OutdatedDirectlyOpenedCentralException: {0}", ex.Message));
+            }
+            catch (Autodesk.Revit.Exceptions.CentralModelException ex)
+            {
+                Utils.Log(string.Format("CentralModelException: {0}", ex.Message));
+            }
+            catch (Autodesk.Revit.Exceptions.FileAccessException ex)
+            {
+                Utils.Log(string.Format("FileAccessException: {0}", ex.Message));
+            }
+            catch (Autodesk.Revit.Exceptions.FileNotFoundException ex)
+            {
+                Utils.Log(string.Format("FileNotFoundException: {0}", ex.Message));
+            }
+            catch (Autodesk.Revit.Exceptions.ForbiddenForDynamicUpdateException ex)
+            {
+                Utils.Log(string.Format("ForbiddenForDynamicUpdateException: {0}", ex.Message));
+            }
+            catch (Autodesk.Revit.Exceptions.InsufficientResourcesException ex)
+            {
+                Utils.Log(string.Format("InsufficientResourcesException: {0}", ex.Message));
+            }
+            catch (Autodesk.Revit.Exceptions.InvalidOperationException ex)
+            {
+                Utils.Log(string.Format("InvalidOperationException: {0}", ex.Message));
+            }
+            catch (Autodesk.Revit.Exceptions.OperationCanceledException ex)
+            {
+                Utils.Log(string.Format("OperationCanceledException: {0}", ex.Message));
+            }
+            catch (Autodesk.Revit.Exceptions.ArgumentException ex)
+            {
+                Utils.Log(string.Format("ArgumentException: {0}", ex.Message));
+            }
 
-            Utils.Log(string.Format("Family Saved!", ""));
+            Utils.Log(string.Format("Family Saved {0}", famPath));
 
             famDoc.Close(false);
 
@@ -576,10 +621,11 @@ namespace CivilConnection
         /// <param name="crossSections">The cross sections.</param>
         /// <param name="name">The name.</param>
         /// <param name="familyTemplate">The mass template path.</param>
-        /// <param name="append">Append the geoemtry definition to the current geometry in the Family.</param>
-        /// <param name="join">If true attempets to join the geoemtries.</param>
+        /// <param name="append">Append the geometry definition to the current geometry in the Family.</param>
+        /// <param name="join">If true attempets to join the geometries.</param>
+        /// <param name="rebar">Can host rebar.</param>
         /// <returns></returns>
-        public static Revit.Elements.Element ByCrossSections(Autodesk.DesignScript.Geometry.Curve[][] crossSections, string name, string familyTemplate, bool append = false, bool join = false)
+        public static Revit.Elements.Element ByCrossSections(Autodesk.DesignScript.Geometry.Curve[][] crossSections, string name, string familyTemplate, bool append = false, bool join = false, bool rebar = true)
         {
             Utils.Log(string.Format("Mass.ByCrossSections started...", ""));
 
@@ -587,16 +633,7 @@ namespace CivilConnection
 
             string famName = string.Format("{0}.rfa", name);
 
-            string famPath = Path.Combine(Path.GetTempPath(), famName);
-
-            try
-            {
-                famPath = Path.Combine(Path.GetDirectoryName(DocumentManager.Instance.CurrentDBDocument.PathName), famName);
-            }
-            catch (Exception ex)
-            {
-                Utils.Log(ex.Message);
-            }
+            string famPath = Path.Combine(Environment.GetEnvironmentVariable("TMP", EnvironmentVariableTarget.User), famName);  // Revit 2020 changed the path to the temp at a session level
 
             Autodesk.Revit.DB.Family family = null;
 
@@ -607,22 +644,6 @@ namespace CivilConnection
             Autodesk.Revit.DB.FamilyInstance rvtFI = null;
 
             bool found = false;
-
-            #region Comment
-            //TransactionManager.Instance.ForceCloseTransaction();
-
-            //foreach (Document d in app.Documents)
-            //{
-            //    if (d.Title == famName)
-            //    {
-            //        Utils.Log(string.Format("Closing document...{0}", ""));
-
-            //        d.Close(false);
-
-            //        Utils.Log(string.Format("Document Closed: {0}", famName));
-            //    }
-            //}
-            #endregion
 
             CloseDocument(app, famName);
 
@@ -637,82 +658,6 @@ namespace CivilConnection
             {
                 found = true;
             }
-
-            #region Comment
-            //try
-            //{
-            //    famPath = Path.Combine(Path.GetDirectoryName(DocumentManager.Instance.CurrentDBDocument.PathName), famName);
-            //}
-            //catch (Exception ex)
-            //{
-            //    Utils.Log(string.Format("ERROR: Mass.ByCrossSections {0}", ex.Message));
-            //}
-
-            
-
-            //foreach (Autodesk.Revit.DB.Family f in DocumentManager.Instance.ElementsOfType<Autodesk.Revit.DB.Family>())
-            //{
-            //    if (f.Name + ".rfa" == famName)
-            //    {
-            //        family = f;
-
-            //        Utils.Log(string.Format("Family Found: {0}", family.Id.IntegerValue));
-
-            //        break;
-            //    }
-            //}
-
-            //if (family != null)
-            //{
-            //    foreach (Autodesk.Revit.DB.FamilyInstance rfi in new FilteredElementCollector(DocumentManager.Instance.CurrentDBDocument)
-            //           .OfClass(typeof(Autodesk.Revit.DB.FamilyInstance))
-            //           .WhereElementIsNotElementType()
-            //           .Cast<Autodesk.Revit.DB.FamilyInstance>()
-            //           .Where(x => x.Symbol.Family.Id.IntegerValue.Equals(family.Id.IntegerValue)))
-            //    {
-            //        rvtFI = rfi;
-            //        found = true;
-
-            //        Utils.Log(string.Format("Family Instance Found: {0}", rfi.Id.IntegerValue));
-
-            //        break;
-            //    }
-            //}
-
-            //if (null != family)
-            //{
-            //    TransactionManager.Instance.ForceCloseTransaction();
-
-            //    Utils.Log(string.Format("Closing Transactions...", ""));
-
-            //    famDoc = DocumentManager.Instance.CurrentDBDocument.EditFamily(family);
-
-            //    Utils.Log(string.Format("Editing Family {0}...", family.Name));
-            //}
-            //else
-            //{
-            //    try
-            //    {
-            //        Utils.Log(string.Format("New Family {0}...", famPath));
-
-            //        famDoc = app.NewFamilyDocument(familyTemplate);
-
-            //        var sao = new SaveAsOptions();
-            //        sao.OverwriteExistingFile = true;
-            //        sao.Compact = true;
-            //        sao.MaximumBackups = 1;
-            //        famDoc.SaveAs(famPath, sao);
-
-            //        Utils.Log(string.Format("Family Ready...", ""));
-            //    }
-            //    catch (Exception ex)
-            //    {
-            //        Utils.Log(string.Format("ERROR: Mass.ByCrossSections {0}", ex.Message));
-
-            //        return fi;
-            //    }
-            //}
-            #endregion
 
             if (famDoc != null)
             {
@@ -729,48 +674,9 @@ namespace CivilConnection
                         if (!append)
                         {
                             CleanupFamilyDocument(famDoc);
-
-                            #region Comment
-                            //Utils.Log(string.Format("Removing existing elements...", ""));
-
-                            //IList<ElementId> toDelete = new List<ElementId>();
-
-                            //toDelete = new FilteredElementCollector(famDoc).OfClass(typeof(Autodesk.Revit.DB.Form)).WhereElementIsNotElementType().ToElementIds().ToList();
-
-                            //foreach (ElementId id in new FilteredElementCollector(famDoc).OfClass(typeof(Autodesk.Revit.DB.CurveElement)).WhereElementIsNotElementType().ToElementIds())
-                            //{
-                            //    toDelete.Add(id);
-                            //}
-
-                            //toDelete = toDelete.Concat(new FilteredElementCollector(famDoc)
-                            //   .OfClass(typeof(Autodesk.Revit.DB.FreeFormElement))
-                            //   .WhereElementIsNotElementType()
-                            //   .ToElementIds())
-                            //   .ToList();
-
-                            //Utils.Log(string.Format("Removing {0} elements...", toDelete.Count));
-
-                            //foreach (ElementId id in toDelete)
-                            //{
-                            //    try
-                            //    {
-                            //        famDoc.Delete(id);
-                            //    }
-                            //    catch (Exception ex)
-                            //    {
-                            //        Utils.Log(string.Format("ERROR: Mass.ByCrossSections {0}", ex.Message));
-
-                            //        continue;
-                            //    }
-                            //}
-
-                            //Utils.Log(string.Format("Operation Completed.", ""));
-                            #endregion
                         }
 
                         var output = new List<Solid>();
-
-                        //var toDel = new List<ElementId>();
 
                         Options opts = new Options();
 
@@ -786,18 +692,32 @@ namespace CivilConnection
 
                                 var refArr = new ReferenceArray();
 
+                                Autodesk.DesignScript.Geometry.Point p = null;
+                                Autodesk.DesignScript.Geometry.Vector normal = null;
+
                                 foreach (var c in profile)
                                 {
                                     Utils.Log(string.Format("Processing Curve...", ""));
 
                                     var curve = c.ToRevitType();
-                                    var sp = Autodesk.Revit.DB.SketchPlane.Create(famDoc, Plane.CreateByNormalAndOrigin(c.Normal.ToXyz(), c.StartPoint.ToXyz()));
+                                    p = c.StartPoint;
+                                    normal = c.Normal;
+                                    var sp = Autodesk.Revit.DB.SketchPlane.Create(famDoc, Plane.CreateByNormalAndOrigin(normal.ToXyz(), p.ToXyz()));
                                     var mc = famDoc.FamilyCreate.NewModelCurve(curve, sp);
-                                    // mc.ChangeToReferenceLine(); // 1.1.11 commented
                                     var r = new Reference(mc);
                                     refArr.Append(r);
 
                                     Utils.Log(string.Format("Curve Added!", ""));
+                                }
+
+                                if (p != null)
+                                {
+                                    p.Dispose();
+                                }
+
+                                if (normal != null)
+                                {
+                                    normal.Dispose();
                                 }
 
                                 refArrArr.Append(refArr);
@@ -809,8 +729,6 @@ namespace CivilConnection
 
                             Utils.Log(string.Format("Loft Created!", ""));
 
-                            //toDel.Add(formTemp.Id);
-
                             foreach (GeometryObject go in formTemp.get_Geometry(opts))
                             {
                                 if (go is Solid)
@@ -819,9 +737,6 @@ namespace CivilConnection
 
                                     if (solid.Volume > 0)
                                     {
-                                        // output.Add(SolidUtils.CreateTransformed(solid, Transform.Identity).ToProtoType());
-                                        // output.Add(SolidUtils.CreateTransformed(solid, Transform.Identity));  // 1.1.11 commented
-
                                         Utils.Log(string.Format("Loft Solid Extracted!", ""));
                                     }
                                 }
@@ -832,40 +747,12 @@ namespace CivilConnection
                         if (join)
                         {
                             TryJoinSolids(famDoc, output);
+                        }
 
-                            #region Comment
-                            //Utils.Log(string.Format("Join Geometry Attempt started...", ""));
-
-                            //if (output.Count > 0)
-                            //{
-                            //    Solid s = output[0];
-                            //    output.RemoveAt(0);
-
-                            //    Utils.Log(string.Format("First Solid to process...", ""));
-
-                            //    foreach (Solid sol in output)
-                            //    {
-                            //        Utils.Log(string.Format("Joining Solids...", ""));
-
-                            //        s = BooleanOperationsUtils.ExecuteBooleanOperation(s, sol, BooleanOperationsType.Union);
-
-                            //        Utils.Log(string.Format("Success!", ""));
-                            //    }
-
-                            //    if (s != null)
-                            //    {
-                            //        Utils.Log(string.Format("One Solid to process...", ""));
-
-                            //        Autodesk.Revit.DB.FreeFormElement form = FreeFormElement.Create(famDoc, s);
-
-                            //        Utils.Log(string.Format("Free Form Element Created!", ""));
-                            //    }
-                            //}
-
-                            // famDoc.Delete(toDel); // 1.1.11 commented
-
-                            // Utils.Log(string.Format("Loft Geometries deleted!", "")); // 1.1.11 commented
-                            #endregion
+                        if (rebar)
+                        {
+                            famDoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_CAN_HOST_REBAR).Set(1);
+                            Utils.Log(string.Format("Family can host rebar.", ""));
                         }
                     }
                     catch (Exception ex)
@@ -879,82 +766,7 @@ namespace CivilConnection
                 }
 
                 SaveFamily(famDoc, famPath);
-
-                #region Comment
-                //if (famDoc.IsReadOnly)
-                //{
-                //    Utils.Log(string.Format("Family is Read-Only", ""));
-
-                //    var sao = new SaveAsOptions();
-                //    sao.OverwriteExistingFile = true;
-                //    sao.Compact = true;
-                //    sao.MaximumBackups = 1;
-
-                //    famDoc.SaveAs(famPath, sao);
-
-                //    Utils.Log(string.Format("Family Saved!", ""));
-
-                //    famDoc.Close(false);
-
-                //    Utils.Log(string.Format("Family Closed!", ""));
-                //}
-                //else
-                //{
-                //    Utils.Log(string.Format("Family is NOT Read-Only", ""));
-
-                //    var sao = new SaveAsOptions();
-                //    sao.OverwriteExistingFile = true;
-                //    sao.Compact = true;
-                //    sao.MaximumBackups = 1;
-
-                //    famDoc.SaveAs(famPath, sao);
-
-                //    Utils.Log(string.Format("Family Saved!", ""));
-
-                //    famDoc.Close(false);
-
-                //    Utils.Log(string.Format("Family Closed!", ""));
-                //}
-                #endregion
             }
-
-            #region Comment
-            //TransactionManager.Instance.EnsureInTransaction(DocumentManager.Instance.CurrentDBDocument);
-
-            //DocumentManager.Instance.CurrentDBDocument.LoadFamily(famPath, new RevitFamilyLoadOptions(), out family);
-
-            //Revit.Elements.FamilyType fs = Revit.Elements.FamilyType.ByFamilyNameAndTypeName(family.Name, family.Name);
-
-            //Utils.Log(string.Format("Family Loaded: {0}", family.Id.IntegerValue));
-
-            //if (!found)
-            //{
-            //    Utils.Log(string.Format("Creating new Family Instance...", ""));
-
-            //    Autodesk.DesignScript.Geometry.Point point = Autodesk.DesignScript.Geometry.Point.Origin();
-
-            //    fi = Revit.Elements.FamilyInstance.ByPoint(fs, point);
-
-            //    Utils.Log(string.Format("Family Instance Created: {0}", fi.InternalElement.Id.IntegerValue));
-            //}
-            //else
-            //{
-            //    DocumentManager.Instance.CurrentDBDocument.LoadFamily(famPath, new RevitFamilyLoadOptions(), out family);
-
-            //    fi = Revit.Elements.InternalUtilities.ElementQueries.OfFamilyType(fs).First();
-
-            //    if (fi == null)
-            //    {
-            //        Utils.Log(string.Format("Family Query returned null...", ""));
-
-            //        fi = rvtFI.ToDSType(true);
-            //    }
-
-            //    Utils.Log(string.Format("Family Instance Updated: {0}", rvtFI.Id.IntegerValue));
-            //}
-
-            //TransactionManager.Instance.TransactionTaskDone();
-            #endregion
 
             fi = UpdateFamilyInstance(famPath, rvtFI, found);
 
@@ -970,14 +782,15 @@ namespace CivilConnection
         /// <param name="name">The name of the family type.</param>
         /// <param name="familyTemplate">the path to the RFT file to use as a template.</param>
         /// <param name="material">The material to assign to the Revit family type.</param>
+        /// <param name="isVoid">If true it will create a void that can be used to cut other Revit elements.</param>
+        /// <param name="rebar">Can host rebar.</param>
         /// <returns></returns>
         public static Revit.Elements.FamilyInstance BySolid(Autodesk.DesignScript.Geometry.Solid solid, 
             string name, 
-            //Revit.Elements.Category category, 
             string familyTemplate, 
-            Revit.Elements.Material material
-            //bool isVoid, 
-            //string subcategory = ""
+            Revit.Elements.Material material,
+            bool isVoid = false,
+            bool rebar = true
             )
         {
             Utils.Log(string.Format("Mass.BySolid started...", ""));
@@ -992,7 +805,6 @@ namespace CivilConnection
 
             bool found = false;
 
-            // var fs = solid.ToRevitFamilyType(name, category, familyTemplate, material, isVoid, subcategory).ToDSType(true) as Revit.Elements.FamilyType;
             // WARNING: This Dynamo method returns the solid poisitoned at it's bounding box minimum point. Not good for CivilConnection.
 
             var doc = DocumentManager.Instance.CurrentDBDocument;
@@ -1001,71 +813,11 @@ namespace CivilConnection
 
             var famName = string.Format("{0}.rfa", name);
 
-            string famPath = Path.Combine(Path.GetTempPath(), famName);
+            
+            string famPath = Path.Combine(Environment.GetEnvironmentVariable("TMP", EnvironmentVariableTarget.User), famName);  // Revit 2020 changed the path to the temp at a session level
 
-            try
-            {
-                famPath = Path.Combine(Path.GetDirectoryName(DocumentManager.Instance.CurrentDBDocument.PathName), famName);
-            }
-            catch (Exception ex)
-            {
-                Utils.Log(string.Format("ERROR: Mass.BySolid {0}", ex.Message));
-            }
 
             Autodesk.Revit.ApplicationServices.Application app = DocumentManager.Instance.CurrentUIApplication.Application;
-
-            #region Comment
-
-            //Utils.Log(string.Format("Closing documents...", ""));
-
-            //foreach (Document d in app.Documents)
-            //{
-            //    if (d.Title == famName)
-            //    {
-            //        d.Close(false);
-            //    }
-            //}
-
-            //Utils.Log(string.Format("Documents closed", ""));
-
-            //foreach (Autodesk.Revit.DB.Family f in DocumentManager.Instance.ElementsOfType<Autodesk.Revit.DB.Family>())
-            //{
-            //    if (f.Name + ".rfa" == famName)
-            //    {
-            //        family = f;
-            //        found = true;
-            //        Utils.Log(string.Format("Family found!", ""));
-            //        break;
-            //    }
-            //}
-
-            //if (null != family)
-            //{
-            //    famDoc = DocumentManager.Instance.CurrentDBDocument.EditFamily(family);
-            //}
-            //else
-            //{
-            //    Utils.Log(string.Format("Family not found... Creating new family", ""));
-
-            //    try
-            //    {
-            //        famDoc = app.NewFamilyDocument(familyTemplate);
-
-            //        var sao = new SaveAsOptions();
-            //        sao.OverwriteExistingFile = true;
-            //        sao.Compact = true;
-            //        sao.MaximumBackups = 1;
-            //        famDoc.SaveAs(famPath, sao);
-            //    }
-            //    catch (Exception ex)
-            //    {
-            //        Utils.Log(string.Format("ERROR: Mass.BySolid {0}", ex.Message));
-
-            //        return fi;
-            //    }
-            //}
-
-            #endregion
 
             CloseDocument(app, famName);
 
@@ -1095,18 +847,71 @@ namespace CivilConnection
 
                     try
                     {
-                        foreach (var item in solid.ToRevitType(TessellatedShapeBuilderTarget.Solid, TessellatedShapeBuilderFallback.Abort, material.InternalElement.Id))
+                        bool newFFE = true;
+
+                        foreach (ElementId eid in new FilteredElementCollector(famDoc).OfClass(typeof(FreeFormElement)).ToElementIds())
                         {
-                            if (item is Solid)
+                            FreeFormElement ffe = famDoc.GetElement(eid) as FreeFormElement;
+
+                            if (ffe != null)
                             {
-                                Utils.Log(string.Format("Solid found...", ""));
+                                foreach (var item in solid.ToRevitType(TessellatedShapeBuilderTarget.Solid, TessellatedShapeBuilderFallback.Abort, material.InternalElement.Id))
+                                {
+                                    if (item is Solid)
+                                    {
+                                        Utils.Log(string.Format("Updating Solid...", ""));
 
-                                Solid s = item as Solid;
+                                        Solid s = item as Solid;
 
-                                Autodesk.Revit.DB.FreeFormElement form = FreeFormElement.Create(famDoc, s);
+                                        ffe.UpdateSolidGeometry(s);
 
-                                Utils.Log(string.Format("Solid created.", ""));
+                                        if (isVoid)
+                                        {
+                                            ffe.Parameters.Cast<Autodesk.Revit.DB.Parameter>().First(x => x.Id.IntegerValue.Equals((int)BuiltInParameter.ELEMENT_IS_CUTTING)).Set(1);
+
+                                            famDoc.OwnerFamily.Parameters.Cast<Autodesk.Revit.DB.Parameter>()
+                                                .First(x => x.Id.IntegerValue.Equals((int)BuiltInParameter.FAMILY_ALLOW_CUT_WITH_VOIDS)).Set(1);
+                                        }
+
+                                        newFFE = false;
+
+                                        Utils.Log(string.Format("Solid Updated.", ""));
+                                    }
+
+                                    break; // Only the first solid
+                                }
                             }
+                        }
+
+                        if (newFFE)
+                        {
+                            foreach (var item in solid.ToRevitType(TessellatedShapeBuilderTarget.Solid, TessellatedShapeBuilderFallback.Abort, material.InternalElement.Id))
+                            {
+                                // For all the solids
+
+                                if (item is Solid)
+                                {
+                                    Utils.Log(string.Format("New Solid found...", ""));
+
+                                    Solid s = item as Solid;
+
+                                    Autodesk.Revit.DB.FreeFormElement form = FreeFormElement.Create(famDoc, s);
+
+                                    if (isVoid)
+                                    {
+                                        form.Parameters.Cast<Autodesk.Revit.DB.Parameter>().First(x => x.Id.IntegerValue.Equals((int)BuiltInParameter.ELEMENT_IS_CUTTING)).Set(1);
+                                        famDoc.OwnerFamily.Parameters.Cast<Autodesk.Revit.DB.Parameter>().First(x => x.Id.IntegerValue.Equals((int)BuiltInParameter.FAMILY_ALLOW_CUT_WITH_VOIDS)).Set(1);
+                                    }
+
+                                    Utils.Log(string.Format("Solid created.", ""));
+                                }
+                            } 
+                        }
+
+                        if (rebar)
+                        {
+                            famDoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_CAN_HOST_REBAR).Set(1);
+                            Utils.Log(string.Format("Family can host rebar.", ""));
                         }
                     }
                     catch (Exception ex)
@@ -1124,41 +929,6 @@ namespace CivilConnection
                 Utils.Log(string.Format("Processing completed.", ""));
             }
 
-            #region Comment
-
-            //famDoc.Close();
-
-            //TransactionManager.Instance.EnsureInTransaction(DocumentManager.Instance.CurrentDBDocument);
-
-            //DocumentManager.Instance.CurrentDBDocument.LoadFamily(famPath, new RevitFamilyLoadOptions(), out family);
-
-            //Revit.Elements.FamilyType fs = Revit.Elements.FamilyType.ByFamilyNameAndTypeName(family.Name, family.Name);
-
-            //if (!found)
-            //{
-            //    Utils.Log(string.Format("Creating new Family Instance...", ""));
-
-            //    Autodesk.DesignScript.Geometry.Point point = Autodesk.DesignScript.Geometry.Point.Origin();
-
-            //    fi = Revit.Elements.FamilyInstance.ByPoint(fs, point);
-
-            //    Utils.Log(string.Format("Family Instance Created: {0}", fi.InternalElement.Id.IntegerValue));
-            //}
-            //else
-            //{
-            //    DocumentManager.Instance.CurrentDBDocument.LoadFamily(famPath, new RevitFamilyLoadOptions(), out family);
-
-            //    fi = Revit.Elements.InternalUtilities.ElementQueries.OfFamilyType(fs).First() as Revit.Elements.FamilyInstance;
-
-            //    if (fi == null)
-            //    {
-            //        Utils.Log(string.Format("Family Query returned null...", ""));
-            //    }
-
-            //    Utils.Log(string.Format("Family Instance Updated: {0}", fi.InternalElement.Id.IntegerValue));
-            //}
-            #endregion
-
             fi = UpdateFamilyInstance(famPath, rvtFI, found);
 
             Utils.Log(string.Format("Mass.BySolid completed.", ""));
@@ -1175,12 +945,14 @@ namespace CivilConnection
         /// <param name="familyTemplate"></param>
         /// <param name="append"></param>
         /// <param name="createForm"></param>
+        /// <param name="rebar">Can host Rebar.</param>
         /// <returns></returns>
         public static Revit.Elements.FamilyInstance ByPathCrossSections(Autodesk.DesignScript.Geometry.Point[] pathPoints, 
             Autodesk.DesignScript.Geometry.Curve[][] crossSections, 
             string name, string familyTemplate,
             bool append = false, 
-            bool createForm = false)
+            bool createForm = false,
+            bool rebar = true)
         {
             Utils.Log(string.Format("Mass.ByPathCrossSections started...", ""));
 
@@ -1188,16 +960,7 @@ namespace CivilConnection
 
             string famName = string.Format("{0}.rfa", name);
 
-            string famPath = Path.Combine(Path.GetTempPath(), famName);
-
-            try
-            {
-                famPath = Path.Combine(Path.GetDirectoryName(DocumentManager.Instance.CurrentDBDocument.PathName), famName);
-            }
-            catch (Exception ex)
-            {
-                Utils.Log(ex.Message);
-            }
+            string famPath = Path.Combine(Environment.GetEnvironmentVariable("TMP", EnvironmentVariableTarget.User), famName);  // Revit 2020 changed the path to the temp at a session level
 
             Autodesk.Revit.ApplicationServices.Application app = DocumentManager.Instance.CurrentUIApplication.Application;
 
@@ -1210,20 +973,6 @@ namespace CivilConnection
             Document famDoc = null;
 
             bool found = false;
-
-            #region Comment
-            //Utils.Log(string.Format("Closing documents...", ""));
-
-            //foreach (Document d in app.Documents)
-            //{
-            //    if (d.Title == famName)
-            //    {
-            //        d.Close(false);
-            //    }
-            //}
-
-            //Utils.Log(string.Format("Documents closed", ""));
-            #endregion
 
             CloseDocument(app, famName);
 
@@ -1238,53 +987,6 @@ namespace CivilConnection
             {
                 found = true;
             }
-
-            #region Comment
-            //try
-            //{
-            //    famPath = Path.Combine(Path.GetDirectoryName(DocumentManager.Instance.CurrentDBDocument.PathName), famName);
-            //}
-            //catch (Exception ex)
-            //{
-            //    Utils.Log(string.Format("ERROR: Mass.ByPathCrossSections {0}", ex.Message));
-            //}
-
-
-            //foreach (Autodesk.Revit.DB.Family f in DocumentManager.Instance.ElementsOfType<Autodesk.Revit.DB.Family>())
-            //{
-            //    if (f.Name + ".rfa" == famName)
-            //    {
-            //        family = f;
-            //        found = true;
-            //        break;
-            //    }
-            //}
-
-            //if (null != family)
-            //{
-            //    famDoc = DocumentManager.Instance.CurrentDBDocument.EditFamily(family);
-            //}
-            //else
-            //{
-            //    try
-            //    {
-            //        famDoc = app.NewFamilyDocument(familyTemplate);
-
-            //        var sao = new SaveAsOptions();
-            //        sao.OverwriteExistingFile = true;
-            //        sao.Compact = true;
-            //        sao.MaximumBackups = 1;
-            //        famDoc.SaveAs(famPath, sao);
-            //    }
-            //    catch (Exception ex)
-            //    {
-            //        Utils.Log(string.Format("ERROR: Mass.ByPathCrossSections {0}", ex.Message));
-
-            //        return fi;
-            //    }
-            //}
-
-            #endregion
 
             if (famDoc != null)
             {
@@ -1301,36 +1003,6 @@ namespace CivilConnection
                         if (!append)
                         {
                             CleanupFamilyDocument(famDoc);
-
-                            #region Comment
-                            //Utils.Log(string.Format("Start deleting existing objects...", ""));
-
-                            //IList<ElementId> toDelete = new List<ElementId>();
-
-                            //toDelete = new FilteredElementCollector(famDoc).OfClass(typeof(Autodesk.Revit.DB.Form)).WhereElementIsNotElementType().ToElementIds().ToList();
-
-                            //foreach (ElementId id in new FilteredElementCollector(famDoc).OfClass(typeof(Autodesk.Revit.DB.CurveElement)).WhereElementIsNotElementType().ToElementIds())
-                            //{
-                            //    toDelete.Add(id);
-                            //}
-
-                            //foreach (ElementId id in toDelete)
-                            //{
-                            //    try
-                            //    {
-                            //        famDoc.Delete(id);
-                            //    }
-                            //    catch (Exception ex)
-                            //    {
-                            //        Utils.Log(string.Format("CivilConnection\nDelete failed\n\n{0}", ex.Message));
-
-                            //        continue;
-                            //    }
-                            //}
-
-                            //Utils.Log(string.Format("Deletion compeleted.", ""));
-
-                            #endregion
                         }
 
                         // Path
@@ -1346,7 +1018,6 @@ namespace CivilConnection
                         }
 
                         var mcPath = famDoc.FamilyCreate.NewCurveByPoints(refPointArray);
-                        // mcPath.IsReferenceLine = true;  // 1.1.11 commented
 
                         refArrPath.Append(new Reference(mcPath));
 
@@ -1359,6 +1030,9 @@ namespace CivilConnection
 
                         // Profiles
 
+                        Autodesk.DesignScript.Geometry.Point pt = null;
+                        Autodesk.DesignScript.Geometry.Vector normal = null;
+
                         var refArrArr = new ReferenceArrayArray();
 
                         foreach (var profile in crossSections)
@@ -1367,10 +1041,11 @@ namespace CivilConnection
 
                             foreach (var c in profile)
                             {
+                                pt = c.StartPoint;
+                                normal = c.Normal;
                                 var curve = c.ToRevitType();
-                                var sp = Autodesk.Revit.DB.SketchPlane.Create(famDoc, Plane.CreateByNormalAndOrigin(c.Normal.ToXyz(), c.StartPoint.ToXyz()));
+                                var sp = Autodesk.Revit.DB.SketchPlane.Create(famDoc, Plane.CreateByNormalAndOrigin(normal.ToXyz(), pt.ToXyz()));
                                 var mc = famDoc.FamilyCreate.NewModelCurve(curve, sp);
-                                // mc.ChangeToReferenceLine(); // 1.1.11 commented
                                 var r = new Reference(mc);
                                 refArr.Append(r);
                             }
@@ -1378,9 +1053,25 @@ namespace CivilConnection
                             refArrArr.Append(refArr);
                         }
 
+                        if (pt != null)
+                        {
+                            pt.Dispose();
+                        }
+
+                        if (normal != null)
+                        {
+                            normal.Dispose();
+                        }
+
                         if (createForm)
                         {
                             var formTemp = famDoc.FamilyCreate.NewSweptBlendForm(true, refArrPath, refArrArr);
+                        }
+
+                        if (rebar)
+                        {
+                            famDoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_CAN_HOST_REBAR).Set(1);
+                            Utils.Log(string.Format("Family can host rebar.", ""));
                         }
                     }
                     catch (Exception ex)
@@ -1395,38 +1086,6 @@ namespace CivilConnection
 
                 SaveFamily(famDoc, famPath);
             }
-
-            #region Comment
-            //TransactionManager.Instance.EnsureInTransaction(DocumentManager.Instance.CurrentDBDocument);
-
-            //DocumentManager.Instance.CurrentDBDocument.LoadFamily(famPath, new RevitFamilyLoadOptions(), out family);
-
-            //Revit.Elements.FamilyType fs = Revit.Elements.FamilyType.ByFamilyNameAndTypeName(family.Name, family.Name);
-
-            //if (!found)
-            //{
-            //    Utils.Log(string.Format("Creating new Family Instance...", ""));
-
-            //    Autodesk.DesignScript.Geometry.Point point = Autodesk.DesignScript.Geometry.Point.Origin();
-
-            //    fi = Revit.Elements.FamilyInstance.ByPoint(fs, point);
-
-            //    Utils.Log(string.Format("Family Instance Created: {0}", fi.InternalElement.Id.IntegerValue));
-            //}
-            //else
-            //{
-            //    DocumentManager.Instance.CurrentDBDocument.LoadFamily(famPath, new RevitFamilyLoadOptions(), out family);
-
-            //    fi = Revit.Elements.InternalUtilities.ElementQueries.OfFamilyType(fs).First() as Revit.Elements.FamilyInstance;
-
-            //    if (fi == null)
-            //    {
-            //        Utils.Log(string.Format("Family Query returned null...", ""));
-            //    }
-
-            //    Utils.Log(string.Format("Family Instance Updated: {0}", fi.InternalElement.Id.IntegerValue));
-            //}
-            #endregion
 
             fi = UpdateFamilyInstance(famPath, rvtFI, found);
 
@@ -1443,8 +1102,9 @@ namespace CivilConnection
         /// <param name="name">The name.</param>
         /// <param name="familyTemplate">The mass template path.</param>
         /// <param name="append">Append the geoemtry definition to the current geometry in the Family.</param>
+        /// <param name="rebar">Can host rebar.</param>
         /// <returns></returns>
-        public static Revit.Elements.Element ByLoftCrossSections(Autodesk.DesignScript.Geometry.Curve[][] crossSections, string name, string familyTemplate, bool append = false)
+        public static Revit.Elements.Element ByLoftCrossSections(Autodesk.DesignScript.Geometry.Curve[][] crossSections, string name, string familyTemplate, bool append = false, bool rebar = true)
         {
             Utils.Log(string.Format("Mass.ByLoftCrossSections started...", ""));
 
@@ -1452,16 +1112,7 @@ namespace CivilConnection
 
             string famName = string.Format("{0}.rfa", name);
 
-            string famPath = Path.Combine(Path.GetTempPath(), famName);
-
-            try
-            {
-                famPath = Path.Combine(Path.GetDirectoryName(DocumentManager.Instance.CurrentDBDocument.PathName), famName);
-            }
-            catch (Exception ex)
-            {
-                Utils.Log(ex.Message);
-            }
+            string famPath = Path.Combine(Environment.GetEnvironmentVariable("TMP", EnvironmentVariableTarget.User), famName);  // Revit 2020 changed the path to the temp at a session level
 
             Autodesk.Revit.ApplicationServices.Application app = DocumentManager.Instance.CurrentUIApplication.Application;
 
@@ -1474,110 +1125,6 @@ namespace CivilConnection
             Document famDoc = null;
 
             bool found = false;
-
-            #region Comment
-
-            //var famName = string.Format("{0}.rfa", name);
-
-            //Autodesk.Revit.ApplicationServices.Application app = DocumentManager.Instance.CurrentUIApplication.Application;
-
-            //foreach (Document d in app.Documents)
-            //{
-            //    if (d.Title == famName)
-            //    {
-            //        Utils.Log(string.Format("Closing document...{0}", ""));
-
-            //        d.Close(false);
-
-            //        Utils.Log(string.Format("Document Closed: {0}", famName));
-            //    }
-            //}
-
-            //string famPath = Path.Combine(Path.GetTempPath(), famName);
-
-            //try
-            //{
-            //    famPath = Path.Combine(Path.GetDirectoryName(DocumentManager.Instance.CurrentDBDocument.PathName), famName);
-            //}
-            //catch (Exception ex)
-            //{
-            //    Utils.Log(string.Format("ERROR: Mass.ByLoftCrossSections {0}", ex.Message));
-            //}
-
-            //Autodesk.Revit.DB.Family family = null;
-
-            //Revit.Elements.Element fi = null;
-
-            //bool found = false;
-
-            //Document famDoc = null;
-
-            //foreach (Autodesk.Revit.DB.Family f in DocumentManager.Instance.ElementsOfType<Autodesk.Revit.DB.Family>())
-            //{
-            //    if (f.Name + ".rfa" == famName)
-            //    {
-            //        family = f;
-
-            //        Utils.Log(string.Format("Family Found: {0}", family.Id.IntegerValue));
-
-            //        break;
-            //    }
-            //}
-
-            //Autodesk.Revit.DB.FamilyInstance rvtFI = null;
-
-            //if (family != null)
-            //{
-            //    foreach (Autodesk.Revit.DB.FamilyInstance rfi in new FilteredElementCollector(DocumentManager.Instance.CurrentDBDocument)
-            //           .OfClass(typeof(Autodesk.Revit.DB.FamilyInstance))
-            //           .WhereElementIsNotElementType()
-            //           .Cast<Autodesk.Revit.DB.FamilyInstance>()
-            //           .Where(x => x.Symbol.Family.Id.IntegerValue.Equals(family.Id.IntegerValue)))
-            //    {
-            //        rvtFI = rfi;
-            //        found = true;
-
-            //        Utils.Log(string.Format("Family Instance Found: {0}", rfi.Id.IntegerValue));
-
-            //        break;
-            //    }
-            //}
-
-            //if (null != family)
-            //{
-            //    TransactionManager.Instance.ForceCloseTransaction();
-
-            //    Utils.Log(string.Format("Closing Transactions...", ""));
-
-            //    famDoc = DocumentManager.Instance.CurrentDBDocument.EditFamily(family);
-
-            //    Utils.Log(string.Format("Editing Family {0}...", family.Name));
-            //}
-            //else
-            //{
-            //    try
-            //    {
-            //        Utils.Log(string.Format("New Family {0}...", famPath));
-
-            //        famDoc = app.NewFamilyDocument(familyTemplate);
-
-            //        var sao = new SaveAsOptions();
-            //        sao.OverwriteExistingFile = true;
-            //        sao.Compact = true;
-            //        sao.MaximumBackups = 1;
-            //        famDoc.SaveAs(famPath, sao);
-
-            //        Utils.Log(string.Format("Family Ready...", ""));
-            //    }
-            //    catch (Exception ex)
-            //    {
-            //        Utils.Log(string.Format("ERROR: Mass.ByLoftCrossSections {0}", ex.Message));
-
-            //        return fi;
-            //    }
-            //}
-            
-#endregion
 
             CloseDocument(app, famName);
 
@@ -1608,43 +1155,6 @@ namespace CivilConnection
                         if (!append)
                         {
                             CleanupFamilyDocument(famDoc);
-
-                            #region Comment
-                            //Utils.Log(string.Format("Removing existing elements...", ""));
-
-                            //IList<ElementId> toDelete = new List<ElementId>();
-
-                            //toDelete = new FilteredElementCollector(famDoc).OfClass(typeof(Autodesk.Revit.DB.Form)).WhereElementIsNotElementType().ToElementIds().ToList();
-
-                            //foreach (ElementId id in new FilteredElementCollector(famDoc).OfClass(typeof(Autodesk.Revit.DB.CurveElement)).WhereElementIsNotElementType().ToElementIds())
-                            //{
-                            //    toDelete.Add(id);
-                            //}
-
-                            //toDelete = toDelete.Concat(new FilteredElementCollector(famDoc)
-                            //    .OfClass(typeof(Autodesk.Revit.DB.FreeFormElement))
-                            //    .WhereElementIsNotElementType()
-                            //    .ToElementIds())
-                            //    .ToList();
-
-                            //Utils.Log(string.Format("Removing {0} elements...", toDelete.Count));
-
-                            //foreach (ElementId id in toDelete)
-                            //{
-                            //    try
-                            //    {
-                            //        famDoc.Delete(id);
-                            //    }
-                            //    catch (Exception ex)
-                            //    {
-                            //        Utils.Log(string.Format("CivilConnection\nDelete failed\n\n{0}", ex.Message));
-
-                            //        continue;
-                            //    }
-                            //}
-
-                            //Utils.Log(string.Format("Operation Completed.", ""));
-                            #endregion
                         }
 
                         var output = new List<Solid>();
@@ -1692,6 +1202,12 @@ namespace CivilConnection
 
                         Utils.Log(string.Format("Loft Geometries created.", ""));
 
+                        if (rebar)
+                        {
+                            famDoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_CAN_HOST_REBAR).Set(1);
+                            Utils.Log(string.Format("Family can host rebar.", ""));
+                        }
+
                     }
                     catch (Exception ex)
                     {
@@ -1704,86 +1220,7 @@ namespace CivilConnection
                 }
 
                 SaveFamily(famDoc, famPath);
-
-                #region Comment
-                //if (famDoc.IsReadOnly)
-                //{
-                //    Utils.Log(string.Format("Family is Read-Only", ""));
-
-                //    var sao = new SaveAsOptions();
-                //    sao.OverwriteExistingFile = true;
-                //    sao.Compact = true;
-                //    sao.MaximumBackups = 1;
-
-                //    famDoc.SaveAs(famPath, sao);
-
-                //    Utils.Log(string.Format("Family Saved!", ""));
-
-                //    famDoc.Close(false);
-
-                //    Utils.Log(string.Format("Family Closed!", ""));
-                //}
-                //else
-                //{
-                //    Utils.Log(string.Format("Family is NOT Read-Only", ""));
-
-                //    var sao = new SaveAsOptions();
-                //    sao.OverwriteExistingFile = true;
-                //    sao.Compact = true;
-                //    sao.MaximumBackups = 1;
-
-                //    famDoc.SaveAs(famPath, sao);
-
-                //    Utils.Log(string.Format("Family Saved!", ""));
-
-                //    famDoc.Close(false);
-
-                //    Utils.Log(string.Format("Family Closed!", ""));
-                //}
-
-                #endregion
             }
-
-            #region Comment
-
-            //TransactionManager.Instance.EnsureInTransaction(DocumentManager.Instance.CurrentDBDocument);
-
-            //DocumentManager.Instance.CurrentDBDocument.LoadFamily(famPath, new RevitFamilyLoadOptions(), out family);
-
-            //Revit.Elements.FamilyType fs = Revit.Elements.FamilyType.ByFamilyNameAndTypeName(family.Name, family.Name);
-
-            //Utils.Log(string.Format("Family Loaded: {0}", family.Id.IntegerValue));
-
-            //if (!found)
-            //{
-            //    Utils.Log(string.Format("Creating new Family Instance...", ""));
-
-            //    Autodesk.DesignScript.Geometry.Point point = Autodesk.DesignScript.Geometry.Point.Origin();
-
-            //    fi = Revit.Elements.FamilyInstance.ByPoint(fs, point);
-
-            //    Utils.Log(string.Format("Family Instance Created: {0}", fi.InternalElement.Id.IntegerValue));
-            //}
-            //else
-            //{
-            //    DocumentManager.Instance.CurrentDBDocument.LoadFamily(famPath, new RevitFamilyLoadOptions(), out family);
-
-            //    fi = Revit.Elements.InternalUtilities.ElementQueries.OfFamilyType(fs).First();
-
-            //    if (fi == null)
-            //    {
-            //        Utils.Log(string.Format("Family Query returned null...", ""));
-
-            //        fi = rvtFI.ToDSType(true);
-            //    }
-
-            //    Utils.Log(string.Format("Family Instance Updated: {0}", rvtFI.Id.IntegerValue));
-            //}
-
-            //TransactionManager.Instance.TransactionTaskDone();
-
-            
-#endregion
 
             fi = UpdateFamilyInstance(famPath, rvtFI, found);
 
@@ -1792,7 +1229,6 @@ namespace CivilConnection
             return fi;
         }
 
-        // TODO: Refactor common functionalities
         // TODO: Check if the family template supports FreeFormElements
 
         /// <summary>
@@ -1803,8 +1239,9 @@ namespace CivilConnection
         /// <param name="name">The name.</param>
         /// <param name="familyTemplate">The mass template path.</param>
         /// <param name="append">Append the geoemtry definition to the current geometry in the Family.</param>
+        /// <param name="rebar">Can host rebar.</param>
         /// <returns></returns>
-        public static Revit.Elements.Element ByShapesCreaseStations(string familyTemplate, string name, AppliedSubassemblyShape[] shapes, double[] stations = null, bool append = false)
+        public static Revit.Elements.Element ByShapesCreaseStations(string familyTemplate, string name, AppliedSubassemblyShape[] shapes, double[] stations = null, bool append = false, bool rebar = true)
         {
             #region FAIL GRACEFULLY
 
@@ -1822,6 +1259,8 @@ namespace CivilConnection
 
             shapes = shapes.OrderBy(x => x.Station).ToArray();  // make sure the shapes are sorted by station
 
+            shapes = shapes.GroupBy(x => Math.Round(x.Station, 8)).Select(g => g.First()).ToArray();  // make sure there are no overalpping shapes
+            
             #endregion
 
             #region FAMILY HOUSEKEEPING
@@ -1830,34 +1269,9 @@ namespace CivilConnection
 
             string famName = string.Format("{0}.rfa", name);
 
-            string famPath = Path.Combine(Path.GetTempPath(), famName);
-
-            try
-            {
-                famPath = Path.Combine(Path.GetDirectoryName(DocumentManager.Instance.CurrentDBDocument.PathName), famName);
-            }
-            catch (Exception ex)
-            {
-                Utils.Log(ex.Message);
-            }
+            string famPath = Path.Combine(Environment.GetEnvironmentVariable("TMP", EnvironmentVariableTarget.User), famName);  // Revit 2020 changed the path to the temp at a session level
 
             Autodesk.Revit.ApplicationServices.Application app = DocumentManager.Instance.CurrentUIApplication.Application;
-
-            #region Comment
-
-            //foreach (Document d in app.Documents)
-            //{
-            //    if (d.Title == famName)
-            //    {
-            //        Utils.Log(string.Format("Closing document...{0}", ""));
-
-            //        d.Close(false);
-
-            //        Utils.Log(string.Format("Document Closed: {0}", famName));
-            //    }
-            //}
-
-            #endregion
 
             Autodesk.Revit.DB.Family family = null;
 
@@ -1883,74 +1297,6 @@ namespace CivilConnection
                 found = true;
             }
 
-            #region Comment
-
-            //foreach (Autodesk.Revit.DB.Family f in DocumentManager.Instance.ElementsOfType<Autodesk.Revit.DB.Family>())
-            //{
-            //    if (f.Name + ".rfa" == famName)
-            //    {
-            //        family = f;
-
-            //        Utils.Log(string.Format("Family Found: {0}", family.Id.IntegerValue));
-
-            //        break;
-            //    }
-            //}
-
-           
-
-            //if (family != null)
-            //{
-            //    foreach (Autodesk.Revit.DB.FamilyInstance rfi in new FilteredElementCollector(DocumentManager.Instance.CurrentDBDocument)
-            //           .OfClass(typeof(Autodesk.Revit.DB.FamilyInstance))
-            //           .WhereElementIsNotElementType()
-            //           .Cast<Autodesk.Revit.DB.FamilyInstance>()
-            //           .Where(x => x.Symbol.Family.Id.IntegerValue.Equals(family.Id.IntegerValue)))
-            //    {
-            //        rvtFI = rfi;
-            //        found = true;
-
-            //        Utils.Log(string.Format("Family Instance Found: {0}", rfi.Id.IntegerValue));
-
-            //        break;
-            //    }
-            //}
-
-            //if (null != family)
-            //{
-            //    TransactionManager.Instance.ForceCloseTransaction();
-
-            //    Utils.Log(string.Format("Closing Transactions...", ""));
-
-            //    famDoc = DocumentManager.Instance.CurrentDBDocument.EditFamily(family);
-
-            //    Utils.Log(string.Format("Editing Family {0}...", family.Name));
-            //}
-            //else
-            //{
-            //    try
-            //    {
-            //        Utils.Log(string.Format("New Family {0}...", famPath));
-
-            //        famDoc = app.NewFamilyDocument(familyTemplate);
-
-            //        var sao = new SaveAsOptions();
-            //        sao.OverwriteExistingFile = true;
-            //        sao.Compact = true;
-            //        sao.MaximumBackups = 1;
-            //        famDoc.SaveAs(famPath, sao);
-
-            //        Utils.Log(string.Format("Family Ready...", ""));
-            //    }
-            //    catch (Exception)
-            //    {
-            //        return fi;
-            //    }
-            //}
-
-
-            #endregion
-
             #endregion
 
             #region GEOMETRY COMPUTATION
@@ -1971,45 +1317,6 @@ namespace CivilConnection
                         if (!append)
                         {
                             CleanupFamilyDocument(famDoc);
-
-                            #region Comment
-                            //IList<ElementId> toDelete = new List<ElementId>();
-
-                            //toDelete = new FilteredElementCollector(famDoc).OfClass(typeof(Autodesk.Revit.DB.Form)).WhereElementIsNotElementType().ToElementIds().ToList();
-
-                            //foreach (ElementId id in new FilteredElementCollector(famDoc).OfClass(typeof(Autodesk.Revit.DB.CurveElement)).WhereElementIsNotElementType().ToElementIds())
-                            //{
-                            //    toDelete.Add(id);
-                            //}
-
-                            //toDelete = toDelete.Concat(new FilteredElementCollector(famDoc)
-                            //    .OfClass(typeof(Autodesk.Revit.DB.FreeFormElement))
-                            //    .WhereElementIsNotElementType()
-                            //    .ToElementIds())
-                            //    .ToList();
-
-                            //if (toDelete.Count > 0)
-                            //{
-                            //    Utils.Log(string.Format("Removing {0} elements...", toDelete.Count));
-
-                            //    foreach (ElementId id in toDelete)
-                            //    {
-                            //        try
-                            //        {
-                            //            famDoc.Delete(id);
-                            //        }
-                            //        catch (Exception ex)
-                            //        {
-                            //            Utils.Log(string.Format("CivilConnection\nDelete failed\n\n{0}", ex.Message));
-
-                            //            continue;
-                            //        }
-                            //    }
-
-                            //    Utils.Log(string.Format("Operation Completed.", ""));
-                            //}
-
-                            #endregion
                         }
                     }
                     catch (Exception ex)
@@ -2028,20 +1335,21 @@ namespace CivilConnection
                     // Only the shapes that satisfy the stations pairs will be processed
                     IList<IList<AppliedSubassemblyShape>> processShapes = new List<IList<AppliedSubassemblyShape>>();
 
-                    if (stations != null)
+                    if (stations != null || stations.Length > 1)
                     {
+                        stations = stations.OrderBy(x => x).ToArray();
+
                         for (int i = 0; i < stations.Length - 1; ++i)
                         {
-                            double min = Math.Round(stations[i], 5);
-                            double max = Math.Round(stations[i + 1], 5);
-
-                            // processShapes.Add(shapes.TakeWhile(x => Math.Round(x.Station, 5) >= min && Math.Round(x.Station, 5) <= max).ToList());
+                            double min = stations[i];
+                            double max = stations[i + 1];
 
                             IList<AppliedSubassemblyShape> list = new List<AppliedSubassemblyShape>();
 
                             foreach (AppliedSubassemblyShape sh in shapes)
                             {
-                                if (Math.Round(sh.Station, 5) >= min && Math.Round(sh.Station, 5) <= max)
+                                if ((Math.Round(min, 6) <= Math.Round(sh.Station, 3) && Math.Round(sh.Station, 6) <= Math.Round(max, 3)) ||
+                                    (Math.Abs(sh.Station - min) < 0.0001) || (Math.Abs(sh.Station - max) < 0.0001))
                                 {
                                     list.Add(sh);
                                 }
@@ -2049,6 +1357,9 @@ namespace CivilConnection
 
                             if (list.Count > 1)
                             {
+                                Utils.Log(string.Format("Min Station {0}", min));
+                                Utils.Log(string.Format("Max Station {0}", max));
+
                                 processShapes.Add(list.OrderBy(x => x.Station).ToList());
                             }
                         }
@@ -2070,6 +1381,9 @@ namespace CivilConnection
 
                         try
                         {
+                            Utils.Log(string.Format("Min Station {0}", segment.Min(x => x.Station)));
+                            Utils.Log(string.Format("Max Station {0}", segment.Max(x => x.Station)));
+
                             var crossSections = segment.Select(x => x.Geometry.Transform(cs).Explode().Select(c => c as Autodesk.DesignScript.Geometry.Curve)).ToArray();
 
                             Utils.Log(string.Format("Cross Sections ready: {0}", crossSections.Length));
@@ -2084,8 +1398,6 @@ namespace CivilConnection
 
                                     foreach (var c in crossSections[i])
                                     {
-                                        // Utils.Log(string.Format("{0}", c));  // Too chatty...
-
                                         var curve = c.ToRevitType();
                                         profile.Append(curve);
                                     }
@@ -2122,38 +1434,67 @@ namespace CivilConnection
                                         // Attempt LoftForm it is failing after creating the first model curve
                                         // Possisbly need to regenerate to get the mode curve geometries
 
-                                        #region Comment
-                                        //ReferenceArrayArray raa = new ReferenceArrayArray();
-
-                                        //foreach (CurveLoop profile in profiles)
-                                        //{
-                                        //    ReferenceArray ra = new ReferenceArray();
-
-                                        //    foreach (Curve curve in profile)
-                                        //    {
-                                        //        var mc = CreateModelCurve(famDoc, curve);
-
-                                        //        ra.Append(mc.GeometryCurve.Reference);
-                                        //    }
-
-                                        //    raa.Append(ra);
-                                        //}
-
-                                        //Autodesk.Revit.DB.Form loft = famDoc.FamilyCreate.NewLoftForm(true, raa);
-
-                                        //familyForms.Add(loft);
-                                        #endregion
-
                                         Utils.Log(string.Format("Form Created!", ""));
                                     }
                                     catch (Exception ex)
                                     {
+                                        Utils.Log(string.Format("ERROR 1: Mass.ByShapesCreaseStations Profiles {0}", ex.Message));
+
                                         foreach (CurveLoop cl in profiles)
                                         {
                                             CreateModelCurves(famDoc, cl);
                                         }
 
-                                        Utils.Log(string.Format("ERROR 1: Mass.ByShapesCreaseStations Profiles {0}", ex.Message));
+                                        // 20190610 -- START
+
+                                        for (int i = 0; i < profiles.Count - 1; i++)
+                                        {
+                                            Utils.Log(string.Format("Processing Cross Section...", ""));
+
+                                            var refArrArr = new ReferenceArrayArray();
+
+                                            foreach (var profile in new CurveLoop[] { profiles[i], profiles[i + 1] })
+                                            {
+                                                Utils.Log(string.Format("Processing Profile...", ""));
+
+                                                var refArr = new ReferenceArray();
+
+                                                foreach (var curve in profile)
+                                                {
+                                                    Utils.Log(string.Format("Processing Curve...", ""));
+
+                                                    var sp = Autodesk.Revit.DB.SketchPlane.Create(famDoc, profile.GetPlane());
+                                                    var mc = famDoc.FamilyCreate.NewModelCurve(curve, sp);
+                                                    var r = new Reference(mc);
+                                                    refArr.Append(r);
+
+                                                    Utils.Log(string.Format("Curve Added!", ""));
+                                                }
+
+                                                refArrArr.Append(refArr);
+
+                                                Utils.Log(string.Format("Profile Added!", ""));
+                                            }
+
+                                            var formTemp = famDoc.FamilyCreate.NewLoftForm(true, refArrArr);
+
+                                            Utils.Log(string.Format("Loft Created!", ""));
+
+                                            foreach (GeometryObject go in formTemp.get_Geometry(opts))
+                                            {
+                                                if (go is Solid)
+                                                {
+                                                    Solid solid = go as Solid;
+
+                                                    if (solid.Volume > 0)
+                                                    {
+                                                        Utils.Log(string.Format("Loft Solid Extracted!", ""));
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // 20190610 -- END
                                     }
                                 }
                                 else
@@ -2164,6 +1505,24 @@ namespace CivilConnection
                             else
                             {
                                 Utils.Log(string.Format("ERROR 3: Not enough profiles for a loft", ""));
+                            }
+
+                            // Dispose 20191118
+                            foreach (var loop in crossSections)
+                            {
+                                foreach (var item in loop)
+                                {
+                                    if (item != null)
+                                    {
+                                        item.Dispose();
+                                    }
+                                }
+                            }
+
+                            if (rebar)
+                            {
+                                famDoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_CAN_HOST_REBAR).Set(1);
+                                Utils.Log(string.Format("Family can host rebar.", ""));
                             }
                         }
                         catch (Exception ex)
@@ -2185,95 +1544,16 @@ namespace CivilConnection
                     }
 
                     f.Commit();
-
-                    cs.Dispose();
                 }
 
                 SaveFamily(famDoc, famPath);
 
-                #region Comment
-
-                //if (famDoc.IsReadOnly)
-                //{
-                //    Utils.Log(string.Format("Family is Read-Only", ""));
-
-                //    var sao = new SaveAsOptions();
-                //    sao.OverwriteExistingFile = true;
-                //    sao.Compact = true;
-                //    sao.MaximumBackups = 1;
-
-                //    famDoc.SaveAs(famPath, sao);
-
-                //    Utils.Log(string.Format("Family Saved!", ""));
-
-                //    famDoc.Close(false);
-
-                //    Utils.Log(string.Format("Family Closed!", ""));
-                //}
-                //else
-                //{
-                //    Utils.Log(string.Format("Family is NOT Read-Only", ""));
-
-                //    var sao = new SaveAsOptions();
-                //    sao.OverwriteExistingFile = true;
-                //    sao.Compact = true;
-                //    sao.MaximumBackups = 1;
-
-                //    famDoc.SaveAs(famPath, sao);
-
-                //    Utils.Log(string.Format("Family Saved!", ""));
-
-                //    famDoc.Close(false);
-
-                //    Utils.Log(string.Format("Family Closed!", ""));
-                //}
-
-                #endregion
             }
 
             #endregion
 
             #region FAMILY LOADING AND PLACEMENT
             
-            #region Comment
-            //TransactionManager.Instance.EnsureInTransaction(DocumentManager.Instance.CurrentDBDocument);
-
-            //DocumentManager.Instance.CurrentDBDocument.LoadFamily(famPath, new RevitFamilyLoadOptions(), out family);
-
-            //Revit.Elements.FamilyType fs = Revit.Elements.FamilyType.ByFamilyNameAndTypeName(family.Name, family.Name);
-
-            //Utils.Log(string.Format("Family Loaded: {0}", family.Id.IntegerValue));
-
-
-            //if (!found)
-            //{
-            //    Utils.Log(string.Format("Creating new Family Instance...", ""));
-
-            //    Autodesk.DesignScript.Geometry.Point point = Autodesk.DesignScript.Geometry.Point.Origin();
-
-            //    fi = Revit.Elements.FamilyInstance.ByPoint(fs, point);
-
-            //    Utils.Log(string.Format("Family Instance Created: {0}", fi.InternalElement.Id.IntegerValue));
-            //}
-            //else
-            //{
-            //    DocumentManager.Instance.CurrentDBDocument.LoadFamily(famPath, new RevitFamilyLoadOptions(), out family);
-
-            //    fi = Revit.Elements.InternalUtilities.ElementQueries.OfFamilyType(fs).First();
-
-            //    if (fi == null)
-            //    {
-            //        Utils.Log(string.Format("Family Query returned null...", ""));
-
-            //        fi = rvtFI.ToDSType(true);
-            //    }
-
-            //    Utils.Log(string.Format("Family Instance Updated: {0}", rvtFI.Id.IntegerValue));
-            //}
-
-            //TransactionManager.Instance.TransactionTaskDone();
-            #endregion
-
             fi = UpdateFamilyInstance(famPath, rvtFI, found);
 
             Utils.Log(string.Format("Mass.ByShapesCreaseStations completed.", ""));
@@ -2292,6 +1572,7 @@ namespace CivilConnection
         /// <param name="familyTemplate">The mass template path.</param>
         /// <param name="alignment">The alignment used to calculate the stations.</param>
         /// <param name="append">Append the geoemtry definition to the current geometry in the Family.</param>
+        /// <param name="rebar">Can host rebar.</param>
         /// <returns></returns>
         public static Revit.Elements.Element ByClosedCurvesCreaseStations(
             string familyTemplate, 
@@ -2299,7 +1580,8 @@ namespace CivilConnection
             Alignment alignment, 
             Autodesk.DesignScript.Geometry.PolyCurve[] closedCurves, 
             double[] stations = null, 
-            bool append = false)
+            bool append = false,
+            bool rebar = true)
         {
             #region FAIL GRACEFULLY
 
@@ -2327,16 +1609,7 @@ namespace CivilConnection
 
             string famName = string.Format("{0}.rfa", name);
 
-            string famPath = Path.Combine(Path.GetTempPath(), famName);
-
-            try
-            {
-                famPath = Path.Combine(Path.GetDirectoryName(DocumentManager.Instance.CurrentDBDocument.PathName), famName);
-            }
-            catch (Exception ex)
-            {
-                Utils.Log(ex.Message);
-            }
+            string famPath = Path.Combine(Environment.GetEnvironmentVariable("TMP", EnvironmentVariableTarget.User), famName);  // Revit 2020 changed the path to the temp at a session level
 
             Autodesk.Revit.ApplicationServices.Application app = DocumentManager.Instance.CurrentUIApplication.Application;
 
@@ -2402,27 +1675,39 @@ namespace CivilConnection
                     // Only the shapes that satisfy the stations pairs will be processed
                     IList<IList<Autodesk.DesignScript.Geometry.PolyCurve>> processShapes = new List<IList<Autodesk.DesignScript.Geometry.PolyCurve>>();
 
-                    if (stations != null)
+                    if (stations != null || stations.Length > 1)
                     {
+                        stations = stations.OrderBy(x => x).ToArray();
+
                         for (int i = 0; i < stations.Length - 1; ++i)
                         {
-                            double min = Math.Round(stations[i], 5);
-                            double max = Math.Round(stations[i + 1], 5);
+                            double min = Math.Round(stations[i], 9);
+                            double max = Math.Round(stations[i + 1], 9);
 
                             IList<Autodesk.DesignScript.Geometry.PolyCurve> list = new List<Autodesk.DesignScript.Geometry.PolyCurve>();
+
+                            double previous = -2 * min;
 
                             foreach (Autodesk.DesignScript.Geometry.PolyCurve sh in closedCurves)
                             {
                                 double station = Convert.ToDouble(alignment.GetStationOffsetElevation(sh.StartPoint)["Station"]);
 
-                                if (Math.Round(station, 5) >= min && Math.Round(station, 5) <= max)
+                                if ((Math.Round(min, 6) <= Math.Round(station, 3) && Math.Round(station, 6) <= Math.Round(max, 3)) ||
+                                   (Math.Abs(station - min) < 0.0001) || (Math.Abs(station - max) < 0.0001))
                                 {
-                                    list.Add(sh);
+                                    if (Math.Abs(previous - station) > 0.00001)
+                                    {
+                                        list.Add(sh);
+                                        previous = Math.Round(station, 5);
+                                    }
                                 }
                             }
 
                             if (list.Count > 1)
                             {
+                                Utils.Log(string.Format("Min Station {0}", min));
+                                Utils.Log(string.Format("Max Station {0}", max));
+
                                 processShapes.Add(list.OrderBy(x => alignment.GetStationOffsetElevation(x.StartPoint)["Station"]).ToList());
                             }
                         }
@@ -2498,22 +1783,92 @@ namespace CivilConnection
                                     }
                                     catch (Exception ex)
                                     {
+                                        Utils.Log(string.Format("ERROR 1: Mass.ByClosedCurvesCreaseStations Profiles {0}", ex.Message));
+
                                         foreach (CurveLoop cl in profiles)
                                         {
                                             CreateModelCurves(famDoc, cl);
                                         }
 
-                                        Utils.Log(string.Format("ERROR 1: Mass.ByClosedCurvesCreaseStations Profiles {0}", ex.Message));
+                                        // 20190610 -- START
+
+                                        for (int i = 0; i < profiles.Count - 1; i++)
+                                        {
+                                            Utils.Log(string.Format("Processing Cross Section...", ""));
+
+                                            var refArrArr = new ReferenceArrayArray();
+
+                                            foreach (var profile in new CurveLoop[] { profiles[i], profiles[i + 1] })
+                                            {
+                                                Utils.Log(string.Format("Processing Profile...", ""));
+
+                                                var refArr = new ReferenceArray();
+
+                                                foreach (var curve in profile)
+                                                {
+                                                    Utils.Log(string.Format("Processing Curve...", ""));
+
+                                                    var sp = Autodesk.Revit.DB.SketchPlane.Create(famDoc, profile.GetPlane());
+                                                    var mc = famDoc.FamilyCreate.NewModelCurve(curve, sp);
+                                                    var r = new Reference(mc);
+                                                    refArr.Append(r);
+
+                                                    Utils.Log(string.Format("Curve Added!", ""));
+                                                }
+
+                                                refArrArr.Append(refArr);
+
+                                                Utils.Log(string.Format("Profile Added!", ""));
+                                            }
+
+                                            var formTemp = famDoc.FamilyCreate.NewLoftForm(true, refArrArr);
+
+                                            Utils.Log(string.Format("Loft Created!", ""));
+
+                                            foreach (GeometryObject go in formTemp.get_Geometry(opts))
+                                            {
+                                                if (go is Solid)
+                                                {
+                                                    Solid solid = go as Solid;
+
+                                                    if (solid.Volume > 0)
+                                                    {
+                                                        Utils.Log(string.Format("Loft Solid Extracted!", ""));
+                                                    }
+                                                }
+                                            }
+
+                                        }
+
+                                        // 20190610 -- END
                                     }
                                 }
                                 else
                                 {
                                     Utils.Log(string.Format("ERROR 2: Not enough profiles for a loft", ""));
                                 }
+
+                                // Dispose 20191118
+                                foreach (var loop in crossSections)
+                                {
+                                    foreach (var item in loop)
+                                    {
+                                        if (item != null)
+                                        {
+                                            item.Dispose();
+                                        }
+                                    }
+                                }
                             }
                             else
                             {
                                 Utils.Log(string.Format("ERROR 3: Not enough profiles for a loft", ""));
+                            }
+
+                            if (rebar)
+                            {
+                                famDoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_CAN_HOST_REBAR).Set(1);
+                                Utils.Log(string.Format("Family can host rebar.", ""));
                             }
                         }
                         catch (Exception ex)
@@ -2536,7 +1891,7 @@ namespace CivilConnection
 
                     f.Commit();
 
-                    cs.Dispose();
+                    //cs.Dispose();
                 }
 
                 SaveFamily(famDoc, famPath);
