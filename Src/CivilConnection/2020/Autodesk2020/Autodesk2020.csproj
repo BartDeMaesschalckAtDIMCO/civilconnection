@@ -21,7 +21,7 @@
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>CivilConnection</RootNamespace>
-    <AssemblyName>Autodesk2021</AssemblyName>
+    <AssemblyName>Autodesk2020</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
@@ -226,7 +226,6 @@
     <Compile Include="UtilsSectionView.cs" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="app.config" />
     <None Include="pkg2021.json">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
