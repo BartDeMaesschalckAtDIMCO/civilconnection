@@ -2711,7 +2711,7 @@ namespace CivilConnection
                 Utils.Log(xmlPath);
 
                 string ns = "http://www.landxml.org/schema/LandXML-1.2";
-
+               
                 foreach (XmlElement se in xmlDoc.GetElementsByTagName("Surface")
                     .Cast<XmlElement>()
                     .Where(x => x.Attributes["name"].Value == surface.Name))

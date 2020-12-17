@@ -1,4 +1,5 @@
-﻿// Copyright (c) 2016 Autodesk, Inc. All rights reserved.
+﻿ 
+// Copyright (c) 2016 Autodesk, Inc. All rights reserved.
 // Author: paolo.serra@autodesk.com
 // 
 // Licensed under the Apache License, Version 2.0 (the "License").
@@ -499,6 +500,7 @@ namespace CivilConnection
                                         catch (Exception ex)
                                         {
                                             Utils.Log(string.Format("Baseline.GetFeaturelinesFromXML Side set to Right", ""));
+                                            Utils.Log(ex.Message);
                                             side = 1;
                                         }
                                         output.Add(new Featureline(this, pc, code, side < 0 ? Featureline.SideType.Left : Featureline.SideType.Right, ri));
@@ -583,7 +585,7 @@ namespace CivilConnection
                     res = output;
                     break;
                 }
-               
+
                 output += 1;
             }
 
@@ -895,6 +897,7 @@ namespace CivilConnection
             try
             {
                 fs = b.MainBaselineFeatureLines.FeatureLinesCol.Item(code);
+
             }
             catch (Exception ex)
             {
@@ -907,8 +910,6 @@ namespace CivilConnection
 
             if (fs != null)
             {
-                Utils.Log(string.Format("Featurelines in region: {0}", fs.Count));
-
                 foreach (var fl in fs.Cast<AeccFeatureLine>())
                 {
                     Dictionary<double, Point> points = new Dictionary<double, Point>();
@@ -932,7 +933,67 @@ namespace CivilConnection
                     ++i;
                 }
             }
+            else
+            {
+                //20200903 Added by Bart De Maesschalck. Check if there is an offset baseline involved
+                try
+                {
+                    int _index = 0;
+                    AeccBaselineFeatureLines bfs = null;
+                    while (_index < b.OffsetBaselineFeatureLinesCol.Count)
+                    {
+                        bfs = b.OffsetBaselineFeatureLinesCol.Item(0);
+                        if (!bfs.IsMainBaseline)
+                        {
+                            try
+                            {
+                                fs = bfs.FeatureLinesCol.Item(code);
+                                if (fs != null)
+                                {
+                                    foreach (var fl in fs.Cast<AeccFeatureLine>())
+                                    {
+                                        Dictionary<double, Point> points = new Dictionary<double, Point>();
 
+                                        foreach (var pt in fl.FeatureLinePoints.Cast<AeccFeatureLinePoint>())
+                                        {
+                                            var p = pt.XYZ;
+
+                                            try
+                                            {
+                                                double _x, _y;
+                                                double _s, _o;
+                                                //point on offset alignment
+                                                bfs.OffsetAlignment.PointLocation(pt.Station, 0, out _x, out _y);
+                                                //offset alignment point on aligment -> station
+                                                b.Alignment.StationOffset(_x, _y, out _s, out _o);
+                                                points.Add(Math.Round(_s, 5), Point.ByCoordinates(p[0], p[1], p[2]));
+                                            }
+                                            catch (Exception ex)
+                                            {
+                                                Utils.Log(string.Format("ERROR: {0}", ex.Message));
+                                            }
+                                        }
+
+                                        cFLs.Add(i, points);
+
+                                        ++i;
+                                    }
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                fs = null;
+                                Utils.Log(string.Format("ERROR 1: {0}", ex.Message));
+                            }
+                            _index++;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Utils.Log(string.Format("ERROR 1: {0}", ex.Message));
+                }
+            }
 
             if (cFLs.Count > 0)
             {
@@ -1017,6 +1078,131 @@ namespace CivilConnection
         public IList<IList<Featureline>> GetFeaturelinesByCode(string code)
         {
             return this.GetFeaturelinesFromXML(code);
+        }
+
+        /// <summary>
+        /// Gets points of the featurelines by code
+        /// </summary>
+        /// <param name="code"></param>
+        /// <returns></returns>
+        public IList<IList<FeaturelinePoint>> GetFeaturelinesPointsByCode(string code)
+        {
+            //Added by Bart De Maesschalck on 04/09/2020
+            Utils.Log(string.Format("Baseline.GetFeaturelinesPointsByCode({0}) Started...", code));
+
+            IList<IList<FeaturelinePoint>> blFeaturelinesPoints = new List<IList<FeaturelinePoint>>();
+
+            CoordinateSystem _totalTransform = RevitUtils.DocumentTotalTransform();
+
+            //code partially copied from GetFeaturelinesByCode_
+            var b = this._baseline;
+
+            AeccFeatureLines fs = null;
+
+            try
+            {
+                fs = b.MainBaselineFeatureLines.FeatureLinesCol.Item(code);
+            }
+            catch (Exception ex)
+            {
+                Utils.Log(string.Format("ERROR: {0}", ex.Message));
+            }
+
+            //Dictionary<int, List<Point>> cFLs = new Dictionary<int, List<Point>>();
+
+            //int i = 0;
+
+            if (fs != null)
+            {
+                Utils.Log(string.Format("Featurelines in region: {0}", fs.Count));
+
+                foreach (var fl in fs.Cast<AeccFeatureLine>())
+                {
+                    List<FeaturelinePoint> points = new List<FeaturelinePoint>();
+
+                    foreach (var pt in fl.FeatureLinePoints.Cast<AeccFeatureLinePoint>())
+                    {
+                        var p = pt.XYZ;
+
+                        try
+                        {
+                            Point _pt = Point.ByCoordinates(p[0], p[1], p[2]).Transform(_totalTransform);
+                            points.Add(new FeaturelinePoint(this, _pt, code, Math.Round(pt.Station, 5)));
+                        }
+                        catch (Exception ex)
+                        {
+                            Utils.Log(string.Format("ERROR: {0}", ex.Message));
+                        }
+                    }
+                    blFeaturelinesPoints.Add(points);
+                }
+            }
+
+            // Code by Bart De Maesschalck
+            //Check if there are offset-alignements generating a featurelines with that code
+            try
+            {
+                int _index = 0;
+                AeccBaselineFeatureLines _bfs = null;
+                while (_index < b.OffsetBaselineFeatureLinesCol.Count)
+                {
+                    _bfs = b.OffsetBaselineFeatureLinesCol.Item(_index);
+                    if (!_bfs.IsMainBaseline)
+                    {
+                        fs = null;
+                        try
+                        {
+                            fs = _bfs.FeatureLinesCol.Item(code);
+                        }
+                        catch (Exception ex)
+                        {
+                            Utils.Log(string.Format("ERROR: {0}", ex.Message));
+                        }
+                        if (fs != null)
+                        {
+                            foreach (var fl in fs.Cast<AeccFeatureLine>())
+                            {
+                                List<FeaturelinePoint> points = new List<FeaturelinePoint>();
+
+                                foreach (var pt in fl.FeatureLinePoints.Cast<AeccFeatureLinePoint>())
+                                {
+                                    var p = pt.XYZ;
+                                    try
+                                    {
+                                        Point _pt = Point.ByCoordinates(p[0], p[1], p[2]).Transform(_totalTransform);
+                                        points.Add(new FeaturelinePoint(this /*_bfs.OffsetAlignment*/, _pt, code, Math.Round(pt.Station, 5)));
+                                        //double _x, _y;
+                                        //double _s, _o;
+                                        //get the station on the main baseline by
+                                        //calculating the easting, nothing of the station on offset alignment
+                                        //_bfs.OffsetAlignment.PointLocation(pt.Station, 0, out _x, out _y);
+                                        //calculating the station of the resulting easting, northing on the main aligment.
+                                        //b.Alignment.StationOffset(_x, _y, out _s, out _o);
+                                        points.Add(/*Math.Round(_s, 5),*/ Point.ByCoordinates(p[0], p[1], p[2]));
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        Utils.Log(string.Format("ERROR: {0}", ex.Message));
+                                    }
+                                }
+                                //blFeaturelinesPoints.Add(Point.PruneDuplicates(points).ToList());
+                            }
+                            //++i;
+                        }
+                    }
+                    _index++;
+                }
+            }
+            catch (Exception ex)
+            {
+                fs = null;
+                Utils.Log(string.Format("ERROR 1: {0}", ex.Message));
+            }
+            // end of code by Bart De Maesschalck            
+
+            Utils.Log(string.Format("Baseline.GetFeaturelinesPointsByCode() Completed.", code));
+
+            return blFeaturelinesPoints;
         }
 
         /// <summary>
