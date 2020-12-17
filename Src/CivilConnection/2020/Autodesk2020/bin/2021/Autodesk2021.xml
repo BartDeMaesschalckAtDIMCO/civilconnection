@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <doc>
     <assembly>
-        <name>Autodesk2021</name>
+        <name>Autodesk2020</name>
     </assembly>
     <members>
         <member name="T:CivilConnection.AbstractMEPCurve">
@@ -536,13 +536,6 @@
         <member name="M:CivilConnection.Baseline.GetFeaturelinesByCode(System.String)">
             <summary>
             Gets the featurelines by code
-            </summary>
-            <param name="code"></param>
-            <returns></returns>
-        </member>
-        <member name="M:CivilConnection.Baseline.GetFeaturelinesPointsByCode(System.String)">
-            <summary>
-            Gets points of the featurelines by code
             </summary>
             <param name="code"></param>
             <returns></returns>
