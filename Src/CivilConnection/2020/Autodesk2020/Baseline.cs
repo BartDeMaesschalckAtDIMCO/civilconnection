@@ -1,4 +1,5 @@
-﻿// Copyright (c) 2016 Autodesk, Inc. All rights reserved.
+﻿ 
+// Copyright (c) 2016 Autodesk, Inc. All rights reserved.
 // Author: paolo.serra@autodesk.com
 // 
 // Licensed under the Apache License, Version 2.0 (the "License").
@@ -499,6 +500,7 @@ namespace CivilConnection
                                         catch (Exception ex)
                                         {
                                             Utils.Log(string.Format("Baseline.GetFeaturelinesFromXML Side set to Right", ""));
+                                            Utils.Log(ex.Message);
                                             side = 1;
                                         }
                                         output.Add(new Featureline(this, pc, code, side < 0 ? Featureline.SideType.Left : Featureline.SideType.Right, ri));
@@ -583,7 +585,7 @@ namespace CivilConnection
                     res = output;
                     break;
                 }
-               
+
                 output += 1;
             }
 
@@ -1105,7 +1107,7 @@ namespace CivilConnection
             {
                 Utils.Log(string.Format("ERROR: {0}", ex.Message));
             }
-           
+
             //Dictionary<int, List<Point>> cFLs = new Dictionary<int, List<Point>>();
 
             //int i = 0;
@@ -1168,7 +1170,7 @@ namespace CivilConnection
                                     try
                                     {
                                         Point _pt = Point.ByCoordinates(p[0], p[1], p[2]).Transform(_totalTransform);
-                                        points.Add(new FeaturelinePoint(_bfs.OffsetAlignment, _pt, code, Math.Round(pt.Station, 5)));
+                                        points.Add(new FeaturelinePoint(this /*_bfs.OffsetAlignment*/, _pt, code, Math.Round(pt.Station, 5)));
                                         //double _x, _y;
                                         //double _s, _o;
                                         //get the station on the main baseline by
@@ -1183,7 +1185,7 @@ namespace CivilConnection
                                         Utils.Log(string.Format("ERROR: {0}", ex.Message));
                                     }
                                 }
-                                blFeaturelinesPoints.Add(Point.PruneDuplicates(points).ToList());
+                                //blFeaturelinesPoints.Add(Point.PruneDuplicates(points).ToList());
                             }
                             //++i;
                         }

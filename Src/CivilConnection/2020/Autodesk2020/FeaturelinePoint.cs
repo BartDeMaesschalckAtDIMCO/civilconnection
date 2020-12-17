@@ -38,12 +38,13 @@ namespace CivilConnection
         /// The station
         /// </summary>
         double _station;
+        
         /*// <summary>
         /// The offset
         /// </summary>
-        //double _offset;
+        //double _offset; */
         /// <summary>
-        */// The CoordinateSystem for the baseline on the point
+        /// The CoordinateSystem for the baseline on the point
         /// </summary>
         CoordinateSystem _cs;
      

@@ -74,10 +74,10 @@ namespace CivilConnection
         /// The maximum elevation
         /// </summary>
         double _maxElevation;
-        /// <summary>
+        /*// <summary>
         /// The coordinates
         /// </summary>
-        double[] _coordinates;
+        double[] _coordinates;*/
         /// <summary>
         /// The style
         /// </summary>
