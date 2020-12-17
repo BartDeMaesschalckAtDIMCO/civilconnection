@@ -198,6 +198,7 @@
     <Compile Include="Corridor.cs" />
     <Compile Include="Duct.cs" />
     <Compile Include="Featureline.cs" />
+    <Compile Include="FeaturelinePoint.cs" />
     <Compile Include="Fitting.cs" />
     <Compile Include="LandFeatureline.cs" />
     <Compile Include="Mass.cs" />

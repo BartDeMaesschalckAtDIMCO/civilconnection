@@ -540,6 +540,13 @@
             <param name="code"></param>
             <returns></returns>
         </member>
+        <member name="M:CivilConnection.Baseline.GetFeaturelinesPointsByCode(System.String)">
+            <summary>
+            Gets points of the featurelines by code
+            </summary>
+            <param name="code"></param>
+            <returns></returns>
+        </member>
         <member name="M:CivilConnection.Baseline.ToString">
             <summary>
             Public textual representation of the Dynamo node preview
@@ -2369,6 +2376,82 @@
             A <see cref="T:System.String" /> that represents this instance.
             </returns>
         </member>
+        <member name="T:CivilConnection.FeaturelinePoint">
+            <summary>
+            FeaturelinePoint obejct type.
+            </summary>
+        </member>
+        <member name="F:CivilConnection.FeaturelinePoint._baseline">
+            <summary>
+            The baseline
+            </summary>
+        </member>
+        <member name="F:CivilConnection.FeaturelinePoint._code">
+            <summary>
+            The code
+            </summary>
+        </member>
+        <member name="F:CivilConnection.FeaturelinePoint._position">
+            <summary>
+            The position
+            </summary>
+        </member>
+        <member name="F:CivilConnection.FeaturelinePoint._station">
+            <summary>
+            The station
+            </summary>
+        </member>
+        <member name="F:CivilConnection.FeaturelinePoint._cs">
+            <summary>
+            The CoordinateSystem for the baseline on the point
+            </summary>
+        </member>
+        <member name="P:CivilConnection.FeaturelinePoint.Baseline">
+            <summary>
+            Gets the baseline.
+            </summary>
+            <value>
+            The baseline.
+            </value>
+        </member>
+        <member name="P:CivilConnection.FeaturelinePoint.Code">
+            <summary>
+            Gets the code.
+            </summary>
+            <value>
+            The code.
+            </value>
+        </member>
+        <member name="P:CivilConnection.FeaturelinePoint.Position">
+            <summary>
+            Gets the position.
+            </summary>
+            <value>
+            XYZ arraty of the position.
+            </value>
+        </member>
+        <member name="P:CivilConnection.FeaturelinePoint.Station">
+            <summary>
+            Gets the station.
+            </summary>
+            <value>
+            The station.
+            </value>
+        </member>
+        <member name="P:CivilConnection.FeaturelinePoint.CoordinateSystem">
+            <summary>
+             Get the coordinate system at the point
+            </summary>        
+        </member>
+        <member name="M:CivilConnection.FeaturelinePoint.#ctor(CivilConnection.Baseline,Autodesk.DesignScript.Geometry.Point,System.String,System.Double)">
+            <summary>
+            Initializes a new instance of the <see cref="T:CivilConnection.FeaturelinePoint"/> class.
+            </summary>
+            <param name="baseline">The baseline.</param>
+            <param name="pt">The point.</param>
+            <param name="code">The code.</param>
+            <param name="station">The station on the baseline.</param>
+        </member>
         <member name="T:CivilConnection.LandFeatureline">
             <summary>
             LandFeatureline object type.
@@ -2407,11 +2490,6 @@
         <member name="F:CivilConnection.LandFeatureline._maxElevation">
             <summary>
             The maximum elevation
-            </summary>
-        </member>
-        <member name="F:CivilConnection.LandFeatureline._coordinates">
-            <summary>
-            The coordinates
             </summary>
         </member>
         <member name="F:CivilConnection.LandFeatureline._style">
