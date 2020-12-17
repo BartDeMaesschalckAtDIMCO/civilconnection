@@ -14,3 +14,4 @@ C:\Users\BDM\Documents\GitHub\THVROCO_Tools\civilconnection\Src\CivilConnection\
 C:\Users\BDM\Documents\GitHub\THVROCO_Tools\civilconnection\Src\CivilConnection\2020\Autodesk2020\obj\2021\CivilConnection.Properties.Resources.resources
 C:\Users\BDM\Documents\GitHub\THVROCO_Tools\civilconnection\Src\CivilConnection\2020\Autodesk2020\obj\2021\Autodesk2020.csproj.GenerateResource.cache
 C:\Users\BDM\Documents\GitHub\THVROCO_Tools\civilconnection\Src\CivilConnection\2020\Autodesk2020\bin\2021\Autodesk2020.xml
+C:\Users\BDM\Documents\GitHub\THVROCO_Tools\civilconnection\Src\CivilConnection\2020\Autodesk2020\obj\2021\Autodesk2020.csprojAssemblyReference.cache
