@@ -13,7 +13,13 @@
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
     <TargetFrameworkProfile />
-  </PropertyGroup>
+ 	<OutputPath>bin\2020\</OutputPath>
+	<DefineConstants>C2020</DefineConstants>
+	<DocumentationFile>bin\2020\Autodesk2020.xml</DocumentationFile>
+	<Optimize>true</Optimize>
+	<Prefer32Bit>false</Prefer32Bit>
+	  <PlatformTarget>x64</PlatformTarget>
+</PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == '2021|AnyCPU'">
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
@@ -21,12 +27,18 @@
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>CivilConnection</RootNamespace>
-    <AssemblyName>Autodesk2021</AssemblyName>
+    <AssemblyName>Autodesk2020</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
     <TargetFrameworkProfile />
-  </PropertyGroup>
+ 		<OutputPath>bin\2021\</OutputPath>
+		<DefineConstants>C2021</DefineConstants>
+		<Optimize>true</Optimize>
+		<DocumentationFile>bin\2021\Autodesk2020.xml</DocumentationFile>
+		<Prefer32Bit>false</Prefer32Bit>
+		<PlatformTarget>x64</PlatformTarget>
+	</PropertyGroup>
   <!--PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
@@ -49,22 +61,8 @@
   </PropertyGroup-->
   <PropertyGroup>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == '2020|AnyCPU'">
-    <OutputPath>bin\2020\</OutputPath>
-    <DefineConstants>C2020</DefineConstants>
-    <DocumentationFile>bin\2020\Autodesk2020.xml</DocumentationFile>
-    <Optimize>true</Optimize>
-    <Prefer32Bit>false</Prefer32Bit>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == '2021|AnyCPU'">
-    <OutputPath>bin\2021\</OutputPath>
-    <DefineConstants>C2021</DefineConstants>
-    <Optimize>true</Optimize>
-    <DocumentationFile>bin\2021\Autodesk2021.xml</DocumentationFile>
-    <Prefer32Bit>false</Prefer32Bit>
-    <PlatformTarget>x64</PlatformTarget>
-  </PropertyGroup>
+  </PropertyGroup>  
+ 
   <PropertyGroup>
     <C3DVersion Condition="'$(Configuration)|$(Platform)' == '2020|AnyCPU'">2020</C3DVersion>
     <C3DVersion Condition="'$(Configuration)|$(Platform)' == '2021|AnyCPU'">2021</C3DVersion>
@@ -211,6 +209,11 @@
     <Compile Include="ProfileView.cs" />
     <Compile Include="ProjectPositionUtils.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Properties\Resources.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
     <Compile Include="RevitFailuresPreprocessor.cs" />
     <Compile Include="RevitFamilyLoadOptions.cs" />
     <Compile Include="RevitUtils.cs" />
@@ -233,6 +236,12 @@
     <None Include="pkg2020.json">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="AfterBuild">
