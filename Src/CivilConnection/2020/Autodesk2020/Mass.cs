@@ -141,7 +141,7 @@ namespace CivilConnection
         /// Internals the set family instance.
         /// </summary>
         /// <param name="fi">The family instance.</param>
-        protected void InternalSetFamilyInstance(Autodesk.Revit.DB.FamilyInstance fi)
+        new protected void InternalSetFamilyInstance(Autodesk.Revit.DB.FamilyInstance fi)
         {
             this.InternalFamilyInstance = fi;
             this.InternalElementId = fi.Id;
