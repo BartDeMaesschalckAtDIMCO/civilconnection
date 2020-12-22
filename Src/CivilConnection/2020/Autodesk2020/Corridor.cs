@@ -601,12 +601,26 @@ namespace CivilConnection
             try
             {
                 foreach (AeccBaseline b in this._corridor.Baselines)
-                {
+                {                   
                     foreach (string code in b.MainBaselineFeatureLines.CodeNames)
                     {
                         if (!output.Contains(code))
                         {
                             output.Add(code);
+                        }
+                    }
+                    if (b.OffsetBaselineFeatureLinesCol.Count > 0)
+                    {
+                        AeccBaselineFeatureLinesCol _offsetBaselines = b.OffsetBaselineFeatureLinesCol;
+                        foreach(AeccBaselineFeatureLines _featureLines in _offsetBaselines)
+                        {
+                            foreach (string code in _featureLines.CodeNames)
+                            {
+                                if (!output.Contains(code))
+                                {
+                                    output.Add(code);   
+                                }
+                            }
                         }
                     }
                 }
@@ -616,6 +630,7 @@ namespace CivilConnection
                 Utils.Log(string.Format("ERROR: {0}", ex.Message));
             }
 
+            
             Utils.Log(string.Format("Corridor.GetCodes completed.", ""));
 
             return output.OrderBy(x => x).ToList();

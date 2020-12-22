@@ -59,10 +59,12 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == '2021|AnyCPU'">
     <OutputPath>bin\2021\</OutputPath>
-    <DefineConstants>C2021</DefineConstants>
+    <DefineConstants>TRACE;DEBUG;C2021</DefineConstants>
     <Optimize>true</Optimize>
     <DocumentationFile>bin\2021\Autodesk2021.xml</DocumentationFile>
     <Prefer32Bit>false</Prefer32Bit>
+    <DebugType>full</DebugType>
+    <DebugSymbols>true</DebugSymbols>
   </PropertyGroup>
   <PropertyGroup>
     <C3DVersion Condition="'$(Configuration)|$(Platform)' == '2020|AnyCPU'">2020</C3DVersion>

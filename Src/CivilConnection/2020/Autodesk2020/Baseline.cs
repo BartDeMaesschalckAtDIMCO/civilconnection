@@ -1085,12 +1085,12 @@ namespace CivilConnection
         /// </summary>
         /// <param name="code"></param>
         /// <returns></returns>
-        public IList<IList<FeaturelinePoint>> GetFeaturelinesPointsByCode(string code)
+        public IList<IList<FeatureLinePoint>> GetFeaturelinePointsByCode(string code)
         {
             //Added by Bart De Maesschalck on 04/09/2020
             Utils.Log(string.Format("Baseline.GetFeaturelinesPointsByCode({0}) Started...", code));
 
-            IList<IList<FeaturelinePoint>> blFeaturelinesPoints = new List<IList<FeaturelinePoint>>();
+            IList<IList<FeatureLinePoint>> blFeaturelinesPoints = new List<IList<FeatureLinePoint>>();
 
             CoordinateSystem _totalTransform = RevitUtils.DocumentTotalTransform();
 
@@ -1101,7 +1101,11 @@ namespace CivilConnection
 
             try
             {
-                fs = b.MainBaselineFeatureLines.FeatureLinesCol.Item(code);
+                List<string> _codes = b.MainBaselineFeatureLines.CodeNames.ToList();
+                if (_codes.Contains(code))
+                {
+                    fs = b.MainBaselineFeatureLines.FeatureLinesCol.Item(code);
+                }
             }
             catch (Exception ex)
             {
@@ -1118,7 +1122,7 @@ namespace CivilConnection
 
                 foreach (var fl in fs.Cast<AeccFeatureLine>())
                 {
-                    List<FeaturelinePoint> points = new List<FeaturelinePoint>();
+                    List<FeatureLinePoint> points = new List<FeatureLinePoint>();
 
                     foreach (var pt in fl.FeatureLinePoints.Cast<AeccFeatureLinePoint>())
                     {
@@ -1126,8 +1130,8 @@ namespace CivilConnection
 
                         try
                         {
-                            Point _pt = Point.ByCoordinates(p[0], p[1], p[2]).Transform(_totalTransform);
-                            points.Add(new FeaturelinePoint(this, _pt, code, Math.Round(pt.Station, 5)));
+                            Point _pt = Point.ByCoordinates(p[0], p[1], p[2]);// 2020-12-18 .Transform(_totalTransform);
+                            points.Add(new FeatureLinePoint(this, _pt, code, Math.Round(pt.Station, 5)));
                         }
                         catch (Exception ex)
                         {
@@ -1146,13 +1150,17 @@ namespace CivilConnection
                 AeccBaselineFeatureLines _bfs = null;
                 while (_index < b.OffsetBaselineFeatureLinesCol.Count)
                 {
-                    _bfs = b.OffsetBaselineFeatureLinesCol.Item(_index);
+                        _bfs = b.OffsetBaselineFeatureLinesCol.Item(_index);
                     if (!_bfs.IsMainBaseline)
                     {
                         fs = null;
                         try
                         {
-                            fs = _bfs.FeatureLinesCol.Item(code);
+                            List<string> _codes = _bfs.FeatureLinesCol.CodeNames.ToList();
+                            if (_codes.Contains(code))
+                            {
+                                fs = _bfs.FeatureLinesCol.Item(code);
+                            }
                         }
                         catch (Exception ex)
                         {
@@ -1162,22 +1170,16 @@ namespace CivilConnection
                         {
                             foreach (var fl in fs.Cast<AeccFeatureLine>())
                             {
-                                List<FeaturelinePoint> points = new List<FeaturelinePoint>();
+                                List<FeatureLinePoint> points = new List<FeatureLinePoint>();
 
                                 foreach (var pt in fl.FeatureLinePoints.Cast<AeccFeatureLinePoint>())
                                 {
                                     var p = pt.XYZ;
                                     try
                                     {
-                                        Point _pt = Point.ByCoordinates(p[0], p[1], p[2]).Transform(_totalTransform);
-                                        points.Add(new FeaturelinePoint(this /*_bfs.OffsetAlignment*/, _pt, code, Math.Round(pt.Station, 5)));
+                                        Point _pt = Point.ByCoordinates(p[0], p[1], p[2]); //2020-12-18 .Transform(_totalTransform);
+                                        points.Add(new FeatureLinePoint(this /*_bfs.OffsetAlignment*/, _pt, code, Math.Round(pt.Station, 5)));
                                         //double _x, _y;
-                                        //double _s, _o;
-                                        //get the station on the main baseline by
-                                        //calculating the easting, nothing of the station on offset alignment
-                                        //_bfs.OffsetAlignment.PointLocation(pt.Station, 0, out _x, out _y);
-                                        //calculating the station of the resulting easting, northing on the main aligment.
-                                        //b.Alignment.StationOffset(_x, _y, out _s, out _o);
                                         points.Add(/*Math.Round(_s, 5),*/ Point.ByCoordinates(p[0], p[1], p[2]));
                                     }
                                     catch (Exception ex)
@@ -1185,7 +1187,7 @@ namespace CivilConnection
                                         Utils.Log(string.Format("ERROR: {0}", ex.Message));
                                     }
                                 }
-                                //blFeaturelinesPoints.Add(Point.PruneDuplicates(points).ToList());
+                                blFeaturelinesPoints.Add(points);
                             }
                             //++i;
                         }

@@ -540,7 +540,7 @@
             <param name="code"></param>
             <returns></returns>
         </member>
-        <member name="M:CivilConnection.Baseline.GetFeaturelinesPointsByCode(System.String)">
+        <member name="M:CivilConnection.Baseline.GetFeaturelinePointsByCode(System.String)">
             <summary>
             Gets points of the featurelines by code
             </summary>
@@ -2376,37 +2376,37 @@
             A <see cref="T:System.String" /> that represents this instance.
             </returns>
         </member>
-        <member name="T:CivilConnection.FeaturelinePoint">
+        <member name="T:CivilConnection.FeatureLinePoint">
             <summary>
             FeaturelinePoint obejct type.
             </summary>
         </member>
-        <member name="F:CivilConnection.FeaturelinePoint._baseline">
+        <member name="F:CivilConnection.FeatureLinePoint._baseline">
             <summary>
             The baseline
             </summary>
         </member>
-        <member name="F:CivilConnection.FeaturelinePoint._code">
+        <member name="F:CivilConnection.FeatureLinePoint._code">
             <summary>
             The code
             </summary>
         </member>
-        <member name="F:CivilConnection.FeaturelinePoint._position">
+        <member name="F:CivilConnection.FeatureLinePoint._position">
             <summary>
             The position
             </summary>
         </member>
-        <member name="F:CivilConnection.FeaturelinePoint._station">
+        <member name="F:CivilConnection.FeatureLinePoint._station">
             <summary>
             The station
             </summary>
         </member>
-        <member name="F:CivilConnection.FeaturelinePoint._cs">
+        <member name="F:CivilConnection.FeatureLinePoint._cs">
             <summary>
             The CoordinateSystem for the baseline on the point
             </summary>
         </member>
-        <member name="P:CivilConnection.FeaturelinePoint.Baseline">
+        <member name="P:CivilConnection.FeatureLinePoint.Baseline">
             <summary>
             Gets the baseline.
             </summary>
@@ -2414,7 +2414,7 @@
             The baseline.
             </value>
         </member>
-        <member name="P:CivilConnection.FeaturelinePoint.Code">
+        <member name="P:CivilConnection.FeatureLinePoint.Code">
             <summary>
             Gets the code.
             </summary>
@@ -2422,7 +2422,7 @@
             The code.
             </value>
         </member>
-        <member name="P:CivilConnection.FeaturelinePoint.Position">
+        <member name="P:CivilConnection.FeatureLinePoint.Position">
             <summary>
             Gets the position.
             </summary>
@@ -2430,7 +2430,7 @@
             XYZ arraty of the position.
             </value>
         </member>
-        <member name="P:CivilConnection.FeaturelinePoint.Station">
+        <member name="P:CivilConnection.FeatureLinePoint.Station">
             <summary>
             Gets the station.
             </summary>
@@ -2438,14 +2438,14 @@
             The station.
             </value>
         </member>
-        <member name="P:CivilConnection.FeaturelinePoint.CoordinateSystem">
+        <member name="P:CivilConnection.FeatureLinePoint.CoordinateSystem">
             <summary>
              Get the coordinate system at the point
             </summary>        
         </member>
-        <member name="M:CivilConnection.FeaturelinePoint.#ctor(CivilConnection.Baseline,Autodesk.DesignScript.Geometry.Point,System.String,System.Double)">
+        <member name="M:CivilConnection.FeatureLinePoint.#ctor(CivilConnection.Baseline,Autodesk.DesignScript.Geometry.Point,System.String,System.Double)">
             <summary>
-            Initializes a new instance of the <see cref="T:CivilConnection.FeaturelinePoint"/> class.
+            Initializes a new instance of the <see cref="T:CivilConnection.FeatureLinePoint"/> class.
             </summary>
             <param name="baseline">The baseline.</param>
             <param name="pt">The point.</param>

@@ -19,7 +19,7 @@ namespace CivilConnection
     /// FeaturelinePoint obejct type.
     /// </summary>
     [DynamoServices.RegisterForTrace()]
-    public class FeaturelinePoint
+    public class FeatureLinePoint
     {
         #region PRIVATE PROPERTIES
         /// <summary>
@@ -89,13 +89,13 @@ namespace CivilConnection
         #region CONSTRUCTOR
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="FeaturelinePoint"/> class.
+        /// Initializes a new instance of the <see cref="FeatureLinePoint"/> class.
         /// </summary>
         /// <param name="baseline">The baseline.</param>
         /// <param name="pt">The point.</param>
         /// <param name="code">The code.</param>
         /// <param name="station">The station on the baseline.</param>
-        internal FeaturelinePoint(Baseline baseline, Point pt, string code, double station)
+        internal FeatureLinePoint(Baseline baseline, Point pt, string code, double station)
         {
             this._baseline = baseline;
             this._position = pt;
