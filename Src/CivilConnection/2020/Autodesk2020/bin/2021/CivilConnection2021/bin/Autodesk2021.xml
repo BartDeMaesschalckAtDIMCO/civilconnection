@@ -2378,7 +2378,12 @@
         </member>
         <member name="T:CivilConnection.FeatureLinePoint">
             <summary>
-            FeaturelinePoint obejct type.
+            FeaturelinePoint object type. Though any point on any featureline can be represented, the puprose of the class is to represent featurelinepoints on corridor featurelines.
+            </summary>
+        </member>
+        <member name="F:CivilConnection.FeatureLinePoint._alignment">
+            <summary>
+            The source alignment
             </summary>
         </member>
         <member name="F:CivilConnection.FeatureLinePoint._baseline">
@@ -2393,26 +2398,36 @@
         </member>
         <member name="F:CivilConnection.FeatureLinePoint._position">
             <summary>
-            The position
+            The position in real-world coordinates
             </summary>
         </member>
         <member name="F:CivilConnection.FeatureLinePoint._station">
             <summary>
-            The station
+            The station on the featureline origin (baseline or offset alignment).
+            </summary>
+        </member>
+        <member name="F:CivilConnection.FeatureLinePoint._stationOnBaseline">
+            <summary>
+            The station on the baseline.
             </summary>
         </member>
         <member name="F:CivilConnection.FeatureLinePoint._cs">
             <summary>
-            The CoordinateSystem for the baseline on the point
+            The CoordinateSystem on the featureline for the point
             </summary>
         </member>
-        <member name="P:CivilConnection.FeatureLinePoint.Baseline">
+        <member name="P:CivilConnection.FeatureLinePoint.BaselineAlignment">
             <summary>
-            Gets the baseline.
+            Gets the baseline-alignment.
             </summary>
             <value>
             The baseline.
             </value>
+        </member>
+        <member name="P:CivilConnection.FeatureLinePoint.SourceAlignment">
+            <summary>
+            Get the alignment the featureline was based upon.
+            </summary>
         </member>
         <member name="P:CivilConnection.FeatureLinePoint.Code">
             <summary>
@@ -2438,19 +2453,29 @@
             The station.
             </value>
         </member>
+        <member name="P:CivilConnection.FeatureLinePoint.StationOnBaseline">
+            <summary>
+            Gets the station on the featureline origin (baseline or offset alignment).
+            </summary>
+            <value>
+            The station.
+            </value>
+        </member>
         <member name="P:CivilConnection.FeatureLinePoint.CoordinateSystem">
             <summary>
              Get the coordinate system at the point
             </summary>        
         </member>
-        <member name="M:CivilConnection.FeatureLinePoint.#ctor(CivilConnection.Baseline,Autodesk.DesignScript.Geometry.Point,System.String,System.Double)">
+        <member name="M:CivilConnection.FeatureLinePoint.#ctor(CivilConnection.Alignment,CivilConnection.Alignment,Autodesk.DesignScript.Geometry.Point,System.String,System.Double,System.Double)">
             <summary>
             Initializes a new instance of the <see cref="T:CivilConnection.FeatureLinePoint"/> class.
             </summary>
-            <param name="baseline">The baseline.</param>
+            <param name="corridorBaseline">The alignment of the corridor baseline.</param>
+            <param name="sourceAlignment">The alignment on which the featureline is based (corridor baseline or offset alignment).</param>
             <param name="pt">The point.</param>
             <param name="code">The code.</param>
-            <param name="station">The station on the baseline.</param>
+            <param name="station">The station on the alignment (baseline or offset alignment)a.</param>
+            <param name="stationOnBaseline">The station of the point on the baseline</param>
         </member>
         <member name="T:CivilConnection.LandFeatureline">
             <summary>

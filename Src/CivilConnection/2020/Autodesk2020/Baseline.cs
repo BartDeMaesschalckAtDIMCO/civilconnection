@@ -1131,7 +1131,9 @@ namespace CivilConnection
                         try
                         {
                             Point _pt = Point.ByCoordinates(p[0], p[1], p[2]);// 2020-12-18 .Transform(_totalTransform);
-                            points.Add(new FeatureLinePoint(this, _pt, code, Math.Round(pt.Station, 5)));
+                            double _station = Math.Round(pt.Station, 5);
+                            //2021-01-04 added station-on-baseline as a required construction paramenter
+                            points.Add(new FeatureLinePoint(this.Alignment, this.Alignment, _pt, code, _station, _station));
                         }
                         catch (Exception ex)
                         {
@@ -1178,7 +1180,11 @@ namespace CivilConnection
                                     try
                                     {
                                         Point _pt = Point.ByCoordinates(p[0], p[1], p[2]); //2020-12-18 .Transform(_totalTransform);
-                                        points.Add(new FeatureLinePoint(this /*_bfs.OffsetAlignment*/, _pt, code, Math.Round(pt.Station, 5)));
+                                        //2021-01-04 added station-on-baseline as a required construction paramenter
+                                        double _station; double _offset;
+                                        b.Alignment.StationOffset(_pt.X, _pt.Y, out _station, out _offset);
+                                        Alignment _offsetAlignment = new Alignment(_bfs.OffsetAlignment);
+                                        points.Add(new FeatureLinePoint(this.Alignment, _offsetAlignment, _pt, code, Math.Round(pt.Station, 5), _station));
                                         //double _x, _y;
                                         points.Add(/*Math.Round(_s, 5),*/ Point.ByCoordinates(p[0], p[1], p[2]));
                                     }

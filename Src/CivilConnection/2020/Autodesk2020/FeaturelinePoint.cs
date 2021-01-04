@@ -16,35 +16,38 @@ using Autodesk.DesignScript.Geometry;
 namespace CivilConnection
 {
     /// <summary>
-    /// FeaturelinePoint obejct type.
+    /// FeaturelinePoint object type. Though any point on any featureline can be represented, the puprose of the class is to represent featurelinepoints on corridor featurelines.
     /// </summary>
     [DynamoServices.RegisterForTrace()]
     public class FeatureLinePoint
     {
         #region PRIVATE PROPERTIES
         /// <summary>
+        /// The source alignment
+        /// </summary>
+        Alignment _alignment;
+        /// <summary>
         /// The baseline
         /// </summary>
-        Baseline _baseline;
+        Alignment _baseline;
         /// <summary>
         /// The code
         /// </summary>
         string _code;
         /// <summary>
-        /// The position
+        /// The position in real-world coordinates
         /// </summary>
         Point _position;
         /// <summary>
-        /// The station
+        /// The station on the featureline origin (baseline or offset alignment).
         /// </summary>
         double _station;
-        
-        /*// <summary>
-        /// The offset
-        /// </summary>
-        //double _offset; */
         /// <summary>
-        /// The CoordinateSystem for the baseline on the point
+        /// The station on the baseline.
+        /// </summary>
+        double _stationOnBaseline;
+        /// <summary>
+        /// The CoordinateSystem on the featureline for the point
         /// </summary>
         CoordinateSystem _cs;
      
@@ -52,12 +55,16 @@ namespace CivilConnection
 
         #region PUBLIC PROPERTIES
         /// <summary>
-        /// Gets the baseline.
+        /// Gets the baseline-alignment.
         /// </summary>
         /// <value>
         /// The baseline.
         /// </value>
-        public Baseline Baseline { get { return this._baseline; } }
+        public Alignment BaselineAlignment { get { return this._baseline; } }
+        /// <summary>
+        /// Get the alignment the featureline was based upon.
+        /// </summary>
+        public Alignment SourceAlignment { get { return this._alignment; } }
         /// <summary>
         /// Gets the code.
         /// </summary>
@@ -79,7 +86,14 @@ namespace CivilConnection
         /// The station.
         /// </value>
         public double Station { get  { return this._station; } }
-         
+        /// <summary>
+        /// Gets the station on the featureline origin (baseline or offset alignment).
+        /// </summary>
+        /// <value>
+        /// The station.
+        /// </value>
+        public double StationOnBaseline { get { return this._stationOnBaseline; } }
+
         ///<summary>
         /// Get the coordinate system at the point
         ///</summary>        
@@ -91,17 +105,21 @@ namespace CivilConnection
         /// <summary>
         /// Initializes a new instance of the <see cref="FeatureLinePoint"/> class.
         /// </summary>
-        /// <param name="baseline">The baseline.</param>
+        /// <param name="corridorBaseline">The alignment of the corridor baseline.</param>
+        /// <param name="sourceAlignment">The alignment on which the featureline is based (corridor baseline or offset alignment).</param>
         /// <param name="pt">The point.</param>
         /// <param name="code">The code.</param>
-        /// <param name="station">The station on the baseline.</param>
-        internal FeatureLinePoint(Baseline baseline, Point pt, string code, double station)
+        /// <param name="station">The station on the alignment (baseline or offset alignment)a.</param>
+        /// <param name="stationOnBaseline">The station of the point on the baseline</param>
+        internal FeatureLinePoint(Alignment corridorBaseline, Alignment sourceAlignment, Point pt, string code, double station, double stationOnBaseline)
         {
-            this._baseline = baseline;
+            this._baseline = corridorBaseline;
+            this._alignment = sourceAlignment;
             this._position = pt;
             this._code = code;
             this._station = station;
-            this._cs = this._baseline. CoordinateSystemByStation(_station);
+            this._stationOnBaseline = stationOnBaseline;
+            this._cs = this._alignment.CoordinateSystemByStation(this._stationOnBaseline);
         }
 
         #endregion
