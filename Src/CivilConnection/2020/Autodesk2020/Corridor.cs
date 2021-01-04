@@ -689,6 +689,21 @@ namespace CivilConnection
                             output.Add(code);
                         }
                     }
+                    //2021-01-04 Added by Bart De Maesschalck to expose codes created on offset alignments in corridors
+                    if (b.OffsetBaselineFeatureLinesCol.Count > 0)
+                    {
+                        AeccBaselineFeatureLinesCol _offsetBaselines = b.OffsetBaselineFeatureLinesCol;
+                        foreach (AeccBaselineFeatureLines _featureLines in _offsetBaselines)
+                        {
+                            foreach (string code in _featureLines.CodeNames)
+                            {
+                                if (!output.Contains(code))
+                                {
+                                    output.Add(code);
+                                }
+                            }
+                        }
+                    }
                 }
             }
             catch (Exception ex)
